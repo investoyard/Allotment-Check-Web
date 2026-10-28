@@ -64,7 +64,7 @@ Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRE
 | 1 | Project setup, Postgres schema, login/roles, client & PAN import from Excel/CSV, encrypted storage, audit log | Done |
 | 2 | First adapter (MUFG Intime), job queue, results storage, basic dashboard | Done; live PAN check not yet verified |
 | 3 | KFin and Bigshare adapters, Retry-After handling. BSE dropped (see notes). Captcha queue deferred: no supported registrar needs one today | Done; live PAN checks not yet verified |
-| 4 | Excel export + history report with filters | |
+| 4 | Excel export + history report with filters | Done; not yet run against the DB |
 | 5 | Scheduler (auto-run on allotment day), retries, alerts | |
 | 6 | Remaining registrars, IPO calendar, listing P&L | |
 

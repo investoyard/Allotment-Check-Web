@@ -16,6 +16,7 @@ import { clientRoutes } from "./routes/clients.js";
 import { panRoutes } from "./routes/pans.js";
 import { auditRoutes } from "./routes/audit.js";
 import { ipoRoutes, jobRoutes, registrarRoutes } from "./routes/ipos.js";
+import { reportRoutes } from "./routes/reports.js";
 import { createRegistry, type Registry } from "./registrars/index.js";
 import { JobRunner } from "./services/jobRunner.js";
 
@@ -76,6 +77,7 @@ export async function buildApp(config: Config, { prisma = new PrismaClient(), re
   await app.register(ipoRoutes, { prefix: "/api/ipos" });
   await app.register(jobRoutes, { prefix: "/api/jobs" });
   await app.register(registrarRoutes, { prefix: "/api/registrars" });
+  await app.register(reportRoutes, { prefix: "/api/reports" });
 
   await app.register(fastifyStatic, { root: publicDir });
 

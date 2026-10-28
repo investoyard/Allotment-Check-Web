@@ -69,6 +69,15 @@ npm run registrar -- ipos mufg        (or kfin, bigshare)
 npm run registrar -- check mufg <ipoId> <PAN>
 ```
 
+## Reports and Excel
+- **IPO page → Download Excel:** a Summary sheet plus a Results sheet for every PAN, using the filters on screen.
+- **Reports tab:** allotment history per client or per PAN.
+  - Shows IPOs applied, allotted, allotment ratio, shares applied and allotted, and allotted value (shares × issue price, where the registrar gives a price).
+  - Filters by date range, client, registrar or IPO.
+  - **Download Excel** gives Overview, By client, By PAN and Detail sheets.
+- **Only "Allotted" and "Not allotted" count as applied.** "Not applied" and errors are left out of the ratio.
+- **PANs in exports are masked.** Admins can tick **Full PANs**, and every export is written to the audit log.
+
 ## Roles
 - **ADMIN**: manage users, import and edit PANs, reveal full PANs (each reveal is logged), view the audit log.
 - **OPERATOR**: view PANs (masked), track IPOs, and run or cancel allotment checks.

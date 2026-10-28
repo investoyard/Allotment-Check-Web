@@ -1,8 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import type { AllotmentStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireAdmin, requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
+import { ipoWorkbook, type IpoExportRow } from "../services/excel.js";
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 const dateField = z.iso.date().nullable().optional();
@@ -34,6 +35,17 @@ const resultsQuery = z.object({
 });
 
 const checkBody = z.object({ scope: z.enum(["all", "unchecked", "errors"]).default("unchecked") });
+export const fullPanQuery = z.object({ fullPan: z.enum(["true", "false"]).default("false") });
+
+/** Sends an .xlsx download with a safe file name, e.g. "Paras Healthcare allotment 2026-10-28.xlsx". */
+export function sendXlsx(reply: FastifyReply, baseName: string, buf: Buffer) {
+  const name = `${baseName.replace(/[^\w .-]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80)} ${new Date().toISOString().slice(0, 10)}.xlsx`;
+  return reply
+    .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    .header("Content-Disposition", `attachment; filename="${name}"`)
+    .header("Cache-Control", "no-store")
+    .send(buf);
+}
 
 const toDate = (d: string | null | undefined) => (d === undefined ? undefined : d === null ? null : new Date(`${d}T00:00:00Z`));
 
@@ -105,22 +117,27 @@ export async function ipoRoutes(app: FastifyInstance) {
     return { ipo };
   });
 
-  /** Every active PAN with its result for this IPO (PENDING if not checked yet). */
-  app.get("/:id/results", async (req, reply) => {
-    const { id } = idParam.parse(req.params);
-    const { status, clientId, q, page, pageSize } = resultsQuery.parse(req.query);
-    if (!(await app.prisma.ipo.findUnique({ where: { id } }))) return reply.code(404).send({ error: "IPO not found" });
-
+  /** PAN filter shared by the results table and its Excel export. */
+  function resultsPanWhere(id: number, { status, clientId, q }: { status?: string; clientId?: number; q?: string }) {
     const where: Prisma.PanWhereInput = { active: true };
     if (clientId) where.clientId = clientId;
     if (status === "PENDING") where.results = { none: { ipoId: id } };
-    else if (status) where.results = { some: { ipoId: id, status } };
+    else if (status) where.results = { some: { ipoId: id, status: status as AllotmentStatus } };
     if (q) {
       where.OR = [
         { holderName: { contains: q, mode: "insensitive" } },
         { client: { name: { contains: q, mode: "insensitive" } } },
       ];
     }
+    return where;
+  }
+
+  /** Every active PAN with its result for this IPO (PENDING if not checked yet). */
+  app.get("/:id/results", async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const { page, pageSize, ...filters } = resultsQuery.parse(req.query);
+    if (!(await app.prisma.ipo.findUnique({ where: { id } }))) return reply.code(404).send({ error: "IPO not found" });
+    const where = resultsPanWhere(id, filters);
 
     const [total, pans] = await Promise.all([
       app.prisma.pan.count({ where }),
@@ -144,6 +161,48 @@ export async function ipoRoutes(app: FastifyInstance) {
       pageSize,
       rows: pans.map(({ results, ...p }) => ({ ...p, result: results[0] ?? null })),
     };
+  });
+
+  /** Excel download of the results table (same filters). Full PANs: admins only, audited. */
+  app.get("/:id/export", async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const { page: _p, pageSize: _s, ...filters } = resultsQuery.parse(req.query);
+    const { fullPan } = fullPanQuery.parse(req.query);
+    if (fullPan === "true" && req.currentUser!.role !== "ADMIN") return reply.code(403).send({ error: "Only admins can export full PANs" });
+    const ipo = await app.prisma.ipo.findUnique({ where: { id } });
+    if (!ipo) return reply.code(404).send({ error: "IPO not found" });
+
+    const pans = await app.prisma.pan.findMany({
+      where: resultsPanWhere(id, filters),
+      orderBy: [{ client: { name: "asc" } }, { holderName: "asc" }],
+      select: {
+        panMasked: true,
+        panEncrypted: true,
+        holderName: true,
+        client: { select: { name: true } },
+        results: { where: { ipoId: id }, omit: { raw: true } },
+      },
+    });
+    const rows: IpoExportRow[] = pans.map((p) => {
+      const r = p.results[0];
+      return {
+        clientName: p.client.name,
+        holderName: p.holderName,
+        pan: fullPan === "true" ? app.vault.open(p.panEncrypted) : p.panMasked,
+        status: r?.status ?? "PENDING",
+        appliedQty: r?.appliedQty ?? null,
+        allottedQty: r?.allottedQty ?? null,
+        category: r?.category ?? null,
+        price: r?.price == null ? null : Number(r.price),
+        amountAdjusted: r?.amountAdjusted == null ? null : Number(r.amountAdjusted),
+        checkedAt: r?.checkedAt ?? null,
+        message: r?.message ?? null,
+      };
+    });
+
+    const buf = await ipoWorkbook(ipo, app.registry.get(ipo.registrar)?.name ?? ipo.registrar, await counts(id), rows);
+    await audit(req, "export.ipo", { entity: "Ipo", entityId: id, details: { rows: rows.length, fullPan: fullPan === "true", ...filters } });
+    return sendXlsx(reply, `${ipo.name} allotment`, buf);
   });
 
   app.post("/:id/check", async (req, reply) => {

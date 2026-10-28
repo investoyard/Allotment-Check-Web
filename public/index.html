@@ -58,6 +58,7 @@
     <h1>Allotment Checker</h1>
     <nav id="nav">
       <button data-view="ipos" class="active">IPOs</button>
+      <button data-view="reports">Reports</button>
       <button data-view="pans">PANs</button>
       <button data-view="import" data-admin>Import</button>
       <button data-view="users" data-admin>Users</button>
@@ -108,11 +109,35 @@
             <option value="NOT_APPLIED">Not applied</option><option value="ERROR">Error</option><option value="PENDING">Unchecked</option></select>
           <select id="resClient"><option value="">All clients</option></select>
           <input id="resQ" placeholder="Search name or client" style="flex:1;min-width:200px">
+          <label class="muted" data-admin-inline><input type="checkbox" id="resFullPan"> Full PANs</label>
+          <button class="btn" id="resExport">Download Excel</button>
         </div>
         <table><thead><tr><th>PAN</th><th>Holder</th><th>Client</th><th>Status</th><th class="num">Applied</th><th class="num">Allotted</th>
           <th>Category</th><th class="num">Price</th><th class="num">Amt adjusted</th><th>Checked</th></tr></thead>
         <tbody id="resRows"></tbody></table>
         <div class="pager"><button class="btn" id="resPrev">‹ Prev</button><span id="resPage" class="muted"></span><button class="btn" id="resNext">Next ›</button></div>
+      </div>
+    </section>
+
+    <section id="view-reports" class="hidden">
+      <div class="card">
+        <div class="row">
+          <label class="muted">From <input type="date" id="repFrom"></label>
+          <label class="muted">To <input type="date" id="repTo"></label>
+          <select id="repClient"><option value="">All clients</option></select>
+          <select id="repRegistrar"><option value="">All registrars</option></select>
+          <select id="repIpo"><option value="">All IPOs</option></select>
+          <select id="repGroup"><option value="client">Group by client</option><option value="pan">Group by PAN</option></select>
+          <span style="flex:1"></span>
+          <label class="muted" data-admin-inline><input type="checkbox" id="repFullPan"> Full PANs</label>
+          <button class="btn primary" id="repExport">Download Excel</button>
+        </div>
+        <p class="muted" style="margin:8px 0 0">Dates match the IPO's allotment date (or the date it was added, if none is set).
+          Only applications actually found count as "applied"; Not applied and errors are left out of the ratio.</p>
+      </div>
+      <div class="card stats" id="repStats"></div>
+      <div class="card">
+        <table><thead id="repHead"></thead><tbody id="repRows"></tbody></table>
       </div>
     </section>
 
@@ -189,7 +214,7 @@ function showLogin() { $("#shell").classList.add("hidden"); $("#login").classLis
 function showShell() {
   $("#login").classList.add("hidden"); $("#shell").classList.remove("hidden");
   $("#me").textContent = `${me.name} · ${me.role}`;
-  document.querySelectorAll("[data-admin]").forEach((b) => b.classList.toggle("hidden", me.role !== "ADMIN"));
+  document.querySelectorAll("[data-admin], [data-admin-inline]").forEach((b) => b.classList.toggle("hidden", me.role !== "ADMIN"));
   show("ipos");
 }
 
@@ -198,8 +223,57 @@ function show(view) {
   const navView = view === "ipo" ? "ipos" : view;
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === navView));
   document.querySelectorAll("main > section").forEach((s) => s.classList.toggle("hidden", s.id !== `view-${view}`));
-  ({ ipos: loadIpos, ipo: loadIpo, pans: loadPans, users: loadUsers, audit: loadAudit, import: () => {} })[view]();
+  ({ ipos: loadIpos, ipo: loadIpo, reports: loadReport, pans: loadPans, users: loadUsers, audit: loadAudit, import: () => {} })[view]();
 }
+
+/** Starts a file download from a GET endpoint (same-origin, so the session cookie goes along). */
+function download(url) {
+  const a = document.createElement("a");
+  a.href = url; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
+}
+const fullPanParam = (box) => (me.role === "ADMIN" && $(box).checked ? "true" : "false");
+
+// --- Reports ---
+const pct = (r) => (r == null ? "—" : `${(r * 100).toFixed(1)}%`);
+const rupees = (n) => (n ? `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—");
+async function fillReportFilters() {
+  if ($("#repClient").dataset.loaded) return;
+  if (!registrars.length) ({ registrars } = await api("/api/registrars"));
+  const [{ clients }, { ipos }] = await Promise.all([api("/api/clients"), api("/api/ipos")]);
+  $("#repClient").innerHTML = `<option value="">All clients</option>` + clients.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  $("#repRegistrar").innerHTML = `<option value="">All registrars</option>` + registrars.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
+  $("#repIpo").innerHTML = `<option value="">All IPOs</option>` + ipos.map((i) => `<option value="${i.id}">${esc(i.name)}</option>`).join("");
+  $("#repClient").dataset.loaded = "1";
+}
+function reportParams() {
+  const p = new URLSearchParams();
+  for (const [k, sel] of [["from", "#repFrom"], ["to", "#repTo"], ["clientId", "#repClient"], ["registrar", "#repRegistrar"], ["ipoId", "#repIpo"]]) {
+    if ($(sel).value) p.set(k, $(sel).value);
+  }
+  return p;
+}
+async function loadReport() {
+  await fillReportFilters();
+  const p = reportParams(); p.set("groupBy", $("#repGroup").value);
+  const { totals: t, rows, groupBy } = await api(`/api/reports/history?${p}`);
+  $("#repStats").innerHTML = [["IPOs", t.ipos], ["PANs", t.pans], ["Applications", t.applications], ["Allotted", t.allotted],
+    ["Allotment ratio", pct(t.ratio)], ["Shares allotted", fmtNum(t.sharesAllotted)], ["Allotted value", rupees(t.allottedValue)]]
+    .map(([k, v]) => `<div><b>${v}</b><span class="muted">${k}</span></div>`).join("");
+  const byPan = groupBy === "pan";
+  $("#repHead").innerHTML = `<tr>${byPan ? "<th>Holder</th><th>PAN</th><th>Client</th>" : "<th>Client</th>"}
+    <th class="num">IPOs applied</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Ratio</th>
+    <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Errors</th></tr>`;
+  $("#repRows").innerHTML = rows.map((r) => `<tr>${byPan ? `<td>${esc(r.label)}</td><td class="mono">${esc(r.panMasked)}</td><td>${esc(r.clientName)}</td>` : `<td>${esc(r.label)}</td>`}
+    <td class="num">${r.applied}</td><td class="num"><b>${r.allotted}</b></td><td class="num">${r.notAllotted}</td><td class="num">${pct(r.ratio)}</td>
+    <td class="num">${fmtNum(r.sharesApplied)}</td><td class="num">${fmtNum(r.sharesAllotted)}</td><td class="num">${rupees(r.allottedValue)}</td>
+    <td class="num">${r.errors || ""}</td></tr>`).join("")
+    || `<tr><td colspan="${byPan ? 11 : 9}" class="muted">No checked results match these filters yet.</td></tr>`;
+}
+["#repFrom", "#repTo", "#repClient", "#repRegistrar", "#repIpo", "#repGroup"].forEach((s) => $(s).addEventListener("change", loadReport));
+$("#repExport").addEventListener("click", () => {
+  const p = reportParams(); p.set("fullPan", fullPanParam("#repFullPan"));
+  download(`/api/reports/history/export?${p}`);
+});
 
 // --- IPOs ---
 const STATUS_LABEL = { ALLOTTED: "Allotted", NOT_ALLOTTED: "Not allotted", NOT_APPLIED: "Not applied", ERROR: "Error", PENDING: "Unchecked" };
@@ -318,6 +392,13 @@ $("#resStatus").addEventListener("change", () => { resPage = 1; loadResults(); }
 $("#resClient").addEventListener("change", () => { resPage = 1; loadResults(); });
 let resTimer;
 $("#resQ").addEventListener("input", () => { clearTimeout(resTimer); resTimer = setTimeout(() => { resPage = 1; loadResults(); }, 300); });
+$("#resExport").addEventListener("click", () => {
+  const p = new URLSearchParams({ fullPan: fullPanParam("#resFullPan") });
+  if ($("#resStatus").value) p.set("status", $("#resStatus").value);
+  if ($("#resClient").value) p.set("clientId", $("#resClient").value);
+  if ($("#resQ").value.trim()) p.set("q", $("#resQ").value.trim());
+  download(`/api/ipos/${currentIpo}/export?${p}`);
+});
 $("#resPrev").addEventListener("click", () => { resPage--; loadResults(); });
 $("#resNext").addEventListener("click", () => { resPage++; loadResults(); });
 
