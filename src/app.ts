@@ -43,7 +43,9 @@ export async function buildApp(config: Config, { prisma = new PrismaClient(), re
       // Request bodies are never logged; also keep cookies out of the logs.
       redact: ["req.headers.cookie", "req.headers.authorization"],
     },
-    trustProxy: true,
+    // Only IIS on this machine may tell us the client's IP/protocol; a client-sent
+    // X-Forwarded-For can't spoof its address past the login lockout.
+    trustProxy: "127.0.0.1,::1",
   });
 
   app.decorate("config", config);

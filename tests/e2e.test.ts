@@ -449,6 +449,22 @@ describe.runIf(run)("end to end", () => {
     expect((await app.inject({ url: "/api/templates/nope", ...as("operator") })).statusCode).toBe(404);
   });
 
+  it("behind IIS (HTTPS): Secure cookie and the real client IP in the audit log", async () => {
+    const res = await app.inject({
+      method: "POST", url: "/api/auth/login",
+      headers: { "x-forwarded-proto": "https", "x-forwarded-for": "6.6.6.6, 203.0.113.9" },
+      payload: { email: "operator@e2e.test", password: "e2e-password-123" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.cookies.find((c) => c.name === "aca_token")!.secure).toBe(true);
+    // IIS appends the real client IP last; a client-supplied first entry ("6.6.6.6") is ignored.
+    const log = await prisma.auditLog.findFirstOrThrow({ where: { action: "auth.login" }, orderBy: { id: "desc" } });
+    expect(log.ip).toBe("203.0.113.9");
+    // Plain local access still works without Secure.
+    const local = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "operator@e2e.test", password: "e2e-password-123" } });
+    expect(local.cookies.find((c) => c.name === "aca_token")!.secure).toBeFalsy();
+  });
+
   it("only admins can trigger the scheduler manually", async () => {
     expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("operator") })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("admin") })).statusCode).toBe(200);

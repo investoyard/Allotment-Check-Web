@@ -35,7 +35,8 @@ export async function authRoutes(app: FastifyInstance) {
     reply.setCookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "strict",
-      secure: app.config.COOKIE_SECURE,
+      // Behind IIS the browser talks HTTPS; trustProxy makes req.protocol reflect X-Forwarded-Proto.
+      secure: app.config.COOKIE_SECURE || req.protocol === "https",
       path: "/",
       maxAge: SESSION_HOURS * 3600,
     });

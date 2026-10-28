@@ -111,6 +111,29 @@ The server has to be running for this to work. See "Running as a service" below.
 - **ADMIN**: manage users, import and edit PANs, reveal full PANs (each reveal is logged), view the audit log.
 - **OPERATOR**: view PANs (masked), track IPOs, and run or cancel allotment checks.
 
+## Publishing through IIS (internet access)
+IIS handles the domain and HTTPS certificate and forwards requests to the app, which listens only on `127.0.0.1`:
+```
+Browser ──HTTPS──► IIS (allotment.yourdomain.com) ──► Allotment Checker on 127.0.0.1:3100 (background task)
+```
+Run these in an **Administrator** PowerShell:
+1. **Install ARR 3.0** (Application Request Routing) from https://www.iis.net/downloads/microsoft/application-request-routing. URL Rewrite is already installed.
+2. **Run the app in the background.** It starts at boot, restarts if it stops, and logs to `logs\app.log`:
+   ```
+   powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1
+   ```
+3. **Create the IIS site.** This turns on ARR proxying, creates the app pool and site, binds http and https (SNI) for your host name with the matching certificate already in IIS, and redirects http to https:
+   ```
+   powershell -ExecutionPolicy Bypass -File scripts\setup-iis.ps1 -HostName allotment.yourdomain.com
+   ```
+4. **Point DNS** for that name to this server's public IP, and make sure ports 80/443 are open.
+
+**Before going live:**
+- Use a long admin password (16+ characters).
+- If possible, limit access to your office IPs in IIS (**IP Address and Domain Restrictions**).
+
+Why not iisnode: it starts and stops Node on demand, which would stop the background checks and the allotment-day scheduler.
+
 ## Running as a service
 `npm run dev` stops when you close the terminal. To keep it running, so auto-checks happen, start it at boot with Windows Task Scheduler:
 - **Action:** `npm.cmd`, **arguments** `start`, **start in** `D:\Claude\AutoCheckAllotment`
