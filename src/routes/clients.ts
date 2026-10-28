@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin, requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { clientCode } from "../services/panImport.js";
+import { sameName } from "../lib/names.js";
 
 const createBody = z.object({
   name: z.string().trim().min(1),
@@ -16,10 +17,18 @@ export async function clientRoutes(app: FastifyInstance) {
   app.get("/", { preHandler: requireLogin }, async () => {
     const clients = await app.prisma.client.findMany({
       orderBy: { name: "asc" },
-      include: { _count: { select: { pans: { where: { active: true } } } } },
+      include: {
+        _count: { select: { pans: { where: { active: true } } } },
+        pans: { where: { active: true }, select: { holderName: true }, take: 1 },
+      },
     });
     return {
-      clients: clients.map(({ _count, ...c }) => ({ ...c, panCount: _count.pans })),
+      clients: clients.map(({ _count, pans, ...c }) => ({
+        ...c,
+        panCount: _count.pans,
+        // A real group: several PANs, or one PAN filed under a different name (e.g. "Sharma Family").
+        isGroup: _count.pans > 1 || (pans[0] != null && !sameName(pans[0].holderName, c.name)),
+      })),
     };
   });
 

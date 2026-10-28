@@ -35,6 +35,7 @@
   .hidden { display:none !important; }
   .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; }
   .num { text-align:right; }
+  table.no-grp .grp { display:none; }
   button.danger { color:var(--bad); border-color:#fca5a5; }
   button.danger:not(:disabled):hover { background:#fee2e2; }
   td input.edit { width:100%; min-width:90px; padding:4px 6px; }
@@ -134,11 +135,11 @@
           <select id="resStatus"><option value="">All statuses</option><option value="ALLOTTED">Allotted</option><option value="NOT_ALLOTTED">Not allotted</option>
             <option value="NOT_APPLIED">Not applied</option><option value="ERROR">Error</option><option value="PENDING">Unchecked</option></select>
           <select id="resClient"><option value="">All clients</option></select>
-          <input id="resQ" placeholder="Search name or client" style="flex:1;min-width:200px">
+          <input id="resQ" placeholder="Search name" style="flex:1;min-width:200px">
           <label class="muted" data-admin-inline><input type="checkbox" id="resFullPan"> Full PANs</label>
           <button class="btn" id="resExport">Download Excel</button>
         </div>
-        <table><thead><tr><th>PAN</th><th>Holder</th><th>Client</th><th>Status</th><th class="num">Applied</th><th class="num">Allotted</th>
+        <table><thead><tr><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Status</th><th class="num">Applied</th><th class="num">Allotted</th>
           <th>Category</th><th class="num">Price</th><th class="num">Amt adjusted</th><th>Checked</th></tr></thead>
         <tbody id="resRows"></tbody></table>
         <div class="pager"><button class="btn" id="resPrev">‹ Prev</button><span id="resPage" class="muted"></span><button class="btn" id="resNext">Next ›</button></div>
@@ -169,7 +170,7 @@
 
     <section id="view-pans" class="hidden">
       <div class="card row">
-        <input id="q" placeholder="Search name, client or full PAN" style="flex:1;min-width:220px">
+        <input id="q" placeholder="Search name or full PAN" style="flex:1;min-width:220px">
         <select id="clientFilter"><option value="">All clients</option></select>
         <label class="muted"><input type="checkbox" id="inactive"> Show inactive</label>
       </div>
@@ -195,7 +196,7 @@
           </span>
         </div>
         <table><thead><tr><th data-admin-inline style="width:28px"><input type="checkbox" id="selPage" title="Select this page"></th>
-          <th>PAN</th><th>Holder</th><th>Client</th><th>Mobile</th><th>DP / Client ID</th><th></th></tr></thead>
+          <th>PAN</th><th>Name</th><th class="grp">Client</th><th>Mobile</th><th>DP / Client ID</th><th></th></tr></thead>
         <tbody id="panRows"></tbody></table>
         <p class="muted" style="margin:8px 0 0" data-admin-inline>Deleting erases the full PAN permanently. Its past IPO results stay in
           Reports with the masked PAN, holder name and client. Use Deactivate to pause a PAN instead.</p>
@@ -226,7 +227,7 @@
       <div id="importResult" class="hidden">
         <div class="card stats" id="importStats"></div>
         <div class="card" id="importErrorsCard"><h4 style="margin-top:0">Errors</h4><table><thead><tr><th>Row</th><th>Problem</th></tr></thead><tbody id="importErrors"></tbody></table></div>
-        <div class="card"><table><thead><tr><th>Row</th><th>Action</th><th>PAN</th><th>Holder</th><th>Client</th><th>Changes</th></tr></thead><tbody id="importRows"></tbody></table></div>
+        <div class="card"><table><thead><tr><th>Row</th><th>Action</th><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Changes</th></tr></thead><tbody id="importRows"></tbody></table></div>
       </div>
     </section>
 
@@ -253,6 +254,25 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
+// A client named exactly like the holder is just "their own client" (import without a Client
+// column) — not a real group. Client cells/columns are hidden in that case.
+const sameName = (a, b) => String(a ?? "").replace(/\s+/g, " ").trim().toLowerCase() === String(b ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+const groupOf = (client, holder) => (sameName(client, holder) ? "" : client);
+const grpCell = (client, holder) => `<td class="grp">${esc(groupOf(client, holder))}</td>`;
+/** Shows the table's Client column only if some row is grouped under a different name. */
+function setGroupCol(tbodySel, rows, client, holder) {
+  $(tbodySel).closest("table").classList.toggle("no-grp", !rows.some((r) => !sameName(client(r), holder(r))));
+}
+/** Fills a client <select> with real groups only; hides it when there are none. */
+function fillGroupSelect(sel, clients, label) {
+  const groups = clients.filter((c) => c.isGroup);
+  const cur = $(sel).value;
+  $(sel).innerHTML = `<option value="">All clients${label ? ` (${groups.length})` : ""}</option>` +
+    groups.map((c) => `<option value="${c.id}">${esc(c.name)}${label ? ` (${c.panCount})` : ""}</option>`).join("");
+  $(sel).value = groups.some((c) => String(c.id) === cur) ? cur : "";
+  $(sel).classList.toggle("hidden", !groups.length);
+  return groups.length > 0;
+}
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 let me = null, page = 1, pageSize = 50;
 
@@ -306,7 +326,10 @@ async function fillReportFilters() {
   if ($("#repClient").dataset.loaded) return;
   if (!registrars.length) ({ registrars } = await api("/api/registrars"));
   const [{ clients }, { ipos }] = await Promise.all([api("/api/clients"), api("/api/ipos")]);
-  $("#repClient").innerHTML = `<option value="">All clients</option>` + clients.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  // Without real groups, "group by client" would just repeat the per-PAN list.
+  const grouped = fillGroupSelect("#repClient", clients);
+  if (!grouped) $("#repGroup").value = "pan";
+  $("#repGroup").classList.toggle("hidden", !grouped);
   $("#repRegistrar").innerHTML = `<option value="">All registrars</option>` + registrars.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
   $("#repIpo").innerHTML = `<option value="">All IPOs</option>` + ipos.map((i) => `<option value="${i.id}">${esc(i.name)}</option>`).join("");
   $("#repClient").dataset.loaded = "1";
@@ -332,16 +355,18 @@ async function loadReport() {
       ? `<div class="muted" style="align-self:end">${t.gainUnknown === t.allotted ? "" : `* ${t.gainUnknown} allotment(s) not counted. `}Enter the issue and listing price on each IPO's page.</div>`
       : "");
   const byPan = groupBy === "pan";
-  $("#repHead").innerHTML = `<tr>${byPan ? "<th>Holder</th><th>PAN</th><th>Client</th>" : "<th>Client</th>"}
+  $("#repHead").innerHTML = `<tr>${byPan ? '<th>Name</th><th>PAN</th><th class="grp">Client</th>' : "<th>Client</th>"}
     <th class="num">IPOs applied</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Ratio</th>
     <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Listing gain</th><th class="num">Errors</th></tr>`;
   $("#repRows").innerHTML = rows.map((r) => `<tr${r.deleted ? ' class="muted"' : ""}>${byPan
-    ? `<td>${esc(r.label)}${r.deleted ? ' <span class="tag" title="PAN deleted; results kept">deleted</span>' : ""}</td><td class="mono">${esc(r.panMasked)}</td><td>${esc(r.clientName)}</td>`
+    ? `<td>${esc(r.label)}${r.deleted ? ' <span class="tag" title="PAN deleted; results kept">deleted</span>' : ""}</td><td class="mono">${esc(r.panMasked)}</td>${grpCell(r.clientName, r.label)}`
     : `<td>${esc(r.label)}</td>`}
     <td class="num">${r.applied}</td><td class="num"><b>${r.allotted}</b></td><td class="num">${r.notAllotted}</td><td class="num">${pct(r.ratio)}</td>
     <td class="num">${fmtNum(r.sharesApplied)}</td><td class="num">${fmtNum(r.sharesAllotted)}</td>${valueCell(r)}
     ${gainCell(r)}<td class="num">${r.errors || ""}</td></tr>`).join("")
     || `<tr><td colspan="${byPan ? 12 : 10}" class="muted">No checked results match these filters yet.</td></tr>`;
+  if (byPan) setGroupCol("#repRows", rows, (r) => r.clientName, (r) => r.label);
+  else $("#repRows").closest("table").classList.remove("no-grp");
 }
 ["#repFrom", "#repTo", "#repClient", "#repRegistrar", "#repIpo", "#repGroup"].forEach((s) => $(s).addEventListener("change", loadReport));
 $("#repExport").addEventListener("click", () => {
@@ -495,7 +520,7 @@ async function loadIpo() {
 
   if (!$("#resClient").dataset.loaded) {
     const { clients } = await api("/api/clients");
-    $("#resClient").innerHTML = `<option value="">All clients</option>` + clients.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+    fillGroupSelect("#resClient", clients);
     $("#resClient").dataset.loaded = "1";
   }
   await loadResults();
@@ -513,12 +538,13 @@ async function loadResults() {
   $("#resPrev").disabled = resPage <= 1; $("#resNext").disabled = resPage >= pages;
   $("#resRows").innerHTML = rows.map(({ result: r, ...p }) => {
     const st = r ? r.status : "PENDING";
-    return `<tr><td class="mono">${esc(p.panMasked)}</td><td>${esc(p.holderName)}</td><td>${esc(p.client.name)}</td>
+    return `<tr><td class="mono">${esc(p.panMasked)}</td><td>${esc(p.holderName)}</td>${grpCell(p.client.name, p.holderName)}
       <td><span class="tag ${st}" title="${esc(r?.message)}">${STATUS_LABEL[st]}</span>${r?.message ? `<div class="muted" style="font-size:12px">${esc(r.message)}</div>` : ""}</td>
       <td class="num">${fmtNum(r?.appliedQty)}</td><td class="num">${st === "ALLOTTED" ? `<b>${fmtNum(r.allottedQty)}</b>` : fmtNum(r?.allottedQty)}</td>
       <td>${esc(r?.category)}</td><td class="num">${fmtNum(r?.price)}</td><td class="num">${fmtNum(r?.amountAdjusted)}</td>
       <td class="muted">${fmtDate(r?.checkedAt)}</td></tr>`;
   }).join("") || `<tr><td colspan="10" class="muted">No PANs match.</td></tr>`;
+  setGroupCol("#resRows", rows, (r) => r.client.name, (r) => r.holderName);
 }
 
 $("#backToIpos").addEventListener("click", () => show("ipos"));
@@ -577,10 +603,7 @@ $("#logout").addEventListener("click", async () => { await api("/api/auth/logout
 // --- PANs ---
 async function loadClients() {
   const { clients } = await api("/api/clients");
-  const sel = $("#clientFilter"), cur = sel.value;
-  sel.innerHTML = `<option value="">All clients (${clients.length})</option>` +
-    clients.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.panCount})</option>`).join("");
-  sel.value = cur;
+  fillGroupSelect("#clientFilter", clients, true);
 }
 async function loadPans() {
   await loadClients();
@@ -599,6 +622,7 @@ async function loadPans() {
   $("#panRows").innerHTML = pans.map(panRow).join("")
     || `<tr><td colspan="7" class="muted">No PANs match${admin ? ". Use Import to add PANs." : "."}</td></tr>`;
   document.querySelectorAll("#view-pans [data-admin-inline]").forEach((el) => el.classList.toggle("hidden", !admin || (el.id === "delFileCard" && !showDelFile)));
+  setGroupCol("#panRows", pans, (x) => x.client.name, (x) => x.holderName);
   updateSelection();
 }
 const panFilter = () => ({
@@ -610,7 +634,7 @@ function panRow(x) {
   const admin = me.role === "ADMIN";
   return `<tr data-row="${x.id}"${x.active ? "" : ' class="muted"'}>
     ${admin ? `<td><input type="checkbox" class="selPan" value="${x.id}"${selected.has(x.id) || selectAllMatching ? " checked" : ""}></td>` : ""}
-    <td class="mono" data-pan="${x.id}">${esc(x.panMasked)}</td><td>${esc(x.holderName)}</td><td>${esc(x.client.name)}</td>
+    <td class="mono" data-pan="${x.id}">${esc(x.panMasked)}</td><td>${esc(x.holderName)}</td>${grpCell(x.client.name, x.holderName)}
     <td>${esc(x.mobile)}</td><td class="mono">${esc(x.dpClientId)}</td>
     <td style="white-space:nowrap">${admin ? `<button class="btn" data-edit="${x.id}">Edit</button>
       <button class="btn" data-reveal="${x.id}">Reveal</button>
@@ -619,7 +643,7 @@ function panRow(x) {
 }
 function editRow(x) {
   return `<tr data-row="${x.id}"><td></td><td class="mono">${esc(x.panMasked)}</td>
-    <td><input class="edit" data-f="holderName" value="${esc(x.holderName)}"></td><td>${esc(x.client.name)}</td>
+    <td><input class="edit" data-f="holderName" value="${esc(x.holderName)}"></td>${grpCell(x.client.name, x.holderName)}
     <td><input class="edit" data-f="mobile" value="${esc(x.mobile)}"></td><td><input class="edit mono" data-f="dpClientId" value="${esc(x.dpClientId)}"></td>
     <td style="white-space:nowrap"><button class="btn primary" data-save="${x.id}">Save</button> <button class="btn" data-cancel="${x.id}">Cancel</button>
       <span class="err" data-editmsg></span></td></tr>`;
@@ -718,10 +742,11 @@ async function runDeleteFile(dryRun) {
     }
     $("#delMsg").textContent = `${r.matched.length} will be deleted · ${r.notFound.length} not found · ${r.errors.length} invalid`;
     $("#delCommit").disabled = !r.matched.length;
-    $("#delResult").innerHTML = `<table><thead><tr><th>Row</th><th>PAN</th><th>Holder</th><th>Client</th><th>Result</th></tr></thead><tbody>
-      ${r.matched.map((m) => `<tr><td>${m.rowNumber}</td><td class="mono">${esc(m.panMasked)}</td><td>${esc(m.holderName)}</td><td>${esc(m.clientName)}</td><td><span class="tag error">will delete</span></td></tr>`).join("")}
-      ${r.notFound.map((m) => `<tr class="muted"><td>${m.rowNumber}</td><td class="mono">${esc(m.panMasked)}</td><td colspan="2"></td><td>not in the system</td></tr>`).join("")}
-      ${r.errors.map((m) => `<tr><td>${m.rowNumber}</td><td colspan="3"></td><td class="err">${esc(m.message)}</td></tr>`).join("")}
+    const grouped = r.matched.some((m) => !sameName(m.clientName, m.holderName));
+    $("#delResult").innerHTML = `<table${grouped ? "" : ' class="no-grp"'}><thead><tr><th>Row</th><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Result</th></tr></thead><tbody>
+      ${r.matched.map((m) => `<tr><td>${m.rowNumber}</td><td class="mono">${esc(m.panMasked)}</td><td>${esc(m.holderName)}</td>${grpCell(m.clientName, m.holderName)}<td><span class="tag error">will delete</span></td></tr>`).join("")}
+      ${r.notFound.map((m) => `<tr class="muted"><td>${m.rowNumber}</td><td class="mono">${esc(m.panMasked)}</td><td></td><td class="grp"></td><td>not in the system</td></tr>`).join("")}
+      ${r.errors.map((m) => `<tr><td>${m.rowNumber}</td><td></td><td></td><td class="grp"></td><td class="err">${esc(m.message)}</td></tr>`).join("")}
       </tbody></table>`;
   } catch (err) { $("#delMsg").textContent = err.message; $("#delMsg").className = "err"; }
 }
@@ -780,7 +805,8 @@ function renderPlan(plan) {
   $("#skipWrap").classList.toggle("hidden", !plan.errors.length);
   $("#importErrors").innerHTML = plan.errors.map((e) => `<tr><td>${e.rowNumber}</td><td class="err">${esc(e.message)}</td></tr>`).join("");
   $("#importRows").innerHTML = plan.rows.map((r) => `<tr><td>${r.rowNumber}</td><td><span class="tag ${r.action}">${r.action}</span></td>
-    <td class="mono">${esc(r.panMasked)}</td><td>${esc(r.holderName)}</td><td>${esc(r.clientName)}</td><td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("");
+    <td class="mono">${esc(r.panMasked)}</td><td>${esc(r.holderName)}</td>${grpCell(r.clientName, r.holderName)}<td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("");
+  setGroupCol("#importRows", plan.rows, (r) => r.clientName, (r) => r.holderName);
 }
 $("#importChecks").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
 $("#preview").addEventListener("click", () => runImport(true));

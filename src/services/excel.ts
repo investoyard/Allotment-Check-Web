@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { groupName, usesGroups } from "../lib/names.js";
 import { listingGain, type HistoryRow, type Tally } from "./reports.js";
 import type { totals as totalsFn } from "./reports.js";
 
@@ -95,12 +96,13 @@ export async function ipoWorkbook(
     ["Unchecked", counts.PENDING ?? 0, INT],
     ["Shares allotted", counts.allottedShares ?? 0, INT],
   ]);
+  const grouped = usesGroups(rows);
   addTable(
     wb,
     "Results",
     [
-      { header: "Client", key: "clientName", width: 26 },
-      { header: "Holder", key: "holderName", width: 28 },
+      { header: "Name", key: "holderName", width: 30 },
+      ...(grouped ? [{ header: "Client", key: "group", width: 26 }] : []),
       { header: "PAN", key: "pan", width: 13 },
       { header: "Status", key: "status", width: 13 },
       { header: "Applied", key: "appliedQty", width: 10, numFmt: INT },
@@ -112,7 +114,7 @@ export async function ipoWorkbook(
       { header: "Checked", key: "checkedAt", width: 18, numFmt: DATETIME },
       { header: "Message", key: "message", width: 40 },
     ],
-    rows.map((r) => ({ ...r, status: STATUS_LABEL[r.status] ?? r.status, _status: r.status })),
+    rows.map((r) => ({ ...r, group: groupName(r.clientName, r.holderName), status: STATUS_LABEL[r.status] ?? r.status, _status: r.status })),
     "status",
   );
   return Buffer.from(await wb.xlsx.writeBuffer());
@@ -156,16 +158,20 @@ export async function historyWorkbook(
     { header: "Errors", key: "errors", width: 8, numFmt: INT },
   ];
 
-  addTable(wb, "By client", tallyCols([{ header: "Client", key: "label", width: 30 }]), byClient as unknown as Record<string, unknown>[]);
+  // Client columns and the "By client" sheet only make sense when PANs are actually grouped.
+  const grouped = usesGroups(detail);
+  const clientCol: Col[] = grouped ? [{ header: "Client", key: "group", width: 26 }] : [];
+  if (grouped) addTable(wb, "By client", tallyCols([{ header: "Client", key: "label", width: 30 }]), byClient as unknown as Record<string, unknown>[]);
   addTable(
     wb,
     "By PAN",
-    tallyCols([
-      { header: "Client", key: "clientName", width: 26 },
-      { header: "Holder", key: "label", width: 28 },
-      { header: "PAN", key: "pan", width: 13 },
-    ]),
-    byPan.map((p) => ({ ...p, label: p.deleted ? `${p.label} (deleted)` : p.label, pan: panOf({ panMasked: p.panMasked!, panEncrypted: p.panEncrypted ?? null }) })),
+    tallyCols([{ header: "Name", key: "label", width: 30 }, ...clientCol, { header: "PAN", key: "pan", width: 13 }]),
+    byPan.map((p) => ({
+      ...p,
+      group: groupName(p.clientName, p.label),
+      label: p.deleted ? `${p.label} (deleted)` : p.label,
+      pan: panOf({ panMasked: p.panMasked!, panEncrypted: p.panEncrypted ?? null }),
+    })),
   );
   addTable(
     wb,
@@ -174,8 +180,8 @@ export async function historyWorkbook(
       { header: "IPO", key: "ipoName", width: 36 },
       { header: "Registrar", key: "registrar", width: 18 },
       { header: "Date", key: "ipoDate", width: 13, numFmt: DATE },
-      { header: "Client", key: "clientName", width: 26 },
-      { header: "Holder", key: "holderName", width: 28 },
+      { header: "Name", key: "holderName", width: 30 },
+      ...clientCol,
       { header: "PAN", key: "pan", width: 13 },
       { header: "Status", key: "status", width: 13 },
       { header: "Applied", key: "appliedQty", width: 10, numFmt: INT },
@@ -191,6 +197,7 @@ export async function historyWorkbook(
       paid: r.issuePrice ?? r.price,
       gain: listingGain(r),
       registrar: registrarName(r.registrar),
+      group: groupName(r.clientName, r.holderName),
       holderName: r.deleted ? `${r.holderName} (deleted)` : r.holderName,
       pan: panOf(r),
       status: STATUS_LABEL[r.status] ?? r.status,

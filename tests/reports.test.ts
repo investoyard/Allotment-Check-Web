@@ -119,6 +119,20 @@ describe("excel", () => {
     expect(res.getRow(2).getCell(3).value).toBe("ABCPX****K");
   });
 
+  it("leaves out Client columns and the By client sheet when no PAN is grouped", async () => {
+    const solo = ROWS.map((r) => ({ ...r, clientName: r.holderName }));
+    const wb = await load(await historyWorkbook("All", totals(solo), tally(solo, "client"), tally(solo, "pan"), solo, (p) => p.panMasked, (id) => id));
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Overview", "By PAN", "Detail"]);
+    const headers = (s: string) => (wb.getWorksheet(s)!.getRow(1).values as unknown[]).slice(1);
+    expect(headers("By PAN").slice(0, 2)).toEqual(["Name", "PAN"]);
+    expect(headers("Detail")).not.toContain("Client");
+
+    const ipo = await load(await ipoWorkbook({ name: "X", registrar: "m", registrarIpoId: "1", allotmentDate: null }, "M", {}, [
+      { clientName: "Ravi", holderName: "Ravi", pan: "ABCPX****K", status: "ALLOTTED", appliedQty: 1, allottedQty: 1, category: null, price: null, amountAdjusted: null, checkedAt: null, message: null, listingGain: null },
+    ]));
+    expect((ipo.getWorksheet("Results")!.getRow(1).values as unknown[]).slice(1, 4)).toEqual(["Name", "PAN", "Status"]);
+  });
+
   it("history workbook uses the PAN formatter for By PAN and Detail", async () => {
     const buf = await historyWorkbook("All", totals(ROWS), tally(ROWS, "client"), tally(ROWS, "pan"), ROWS, (p) => `PAN(${p.panMasked})`, (id) => id.toUpperCase());
     const wb = await load(buf);
