@@ -4,258 +4,526 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Allotment Checker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%232563eb'/%3E%3Cpath d='m7.5 12.5 3 3 6-7' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
+  :root {
+    --bg: #f5f7fb; --surface: #ffffff; --surface-2: #f8fafc; --text: #0f172a; --text-2: #334155; --muted: #64748b;
+    --line: #e2e8f0; --line-2: #eef2f7; --accent: #2563eb; --accent-2: #1d4ed8; --accent-soft: #eff6ff;
+    --ok: #15803d; --ok-soft: #dcfce7; --warn: #b45309; --warn-soft: #fef3c7; --bad: #b91c1c; --bad-soft: #fee2e2;
+    --info: #4338ca; --info-soft: #e0e7ff; --radius: 10px; --shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+    --shadow-lg: 0 10px 30px -10px rgba(15,23,42,.18), 0 4px 10px -4px rgba(15,23,42,.08);
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; align-items:center; gap:16px; padding:10px 20px; background:var(--card); border-bottom:1px solid var(--line); }
-  header h1 { font-size:16px; margin:0; }
-  nav { display:flex; gap:4px; flex:1; }
-  nav button { background:none; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; color:var(--muted); font:inherit; }
-  nav button.active { background:#e8efff; color:var(--accent); font-weight:600; }
-  main { padding:20px; max-width:1200px; margin:0 auto; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  input, select, button.btn { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; }
-  button.btn { cursor:pointer; }
-  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  button:disabled { opacity:.5; cursor:default; }
-  table { width:100%; border-collapse:collapse; }
-  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; }
-  .muted { color:var(--muted); }
-  .mono { font-family: ui-monospace, Consolas, monospace; }
-  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#eef; }
-  .tag.create { background:#dcfce7; color:var(--ok); } .tag.update { background:#fef3c7; color:var(--warn); }
-  .tag.unchanged { background:#f3f4f6; color:var(--muted); } .tag.error { background:#fee2e2; color:var(--bad); }
-  .err { color:var(--bad); }
-  .stats { display:flex; gap:24px; } .stats div b { display:block; font-size:22px; }
-  #login { max-width:340px; margin:80px auto; }
-  #login input { width:100%; margin-bottom:10px; }
+  html, body { height: 100%; }
+  body { margin:0; font:14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; }
   .hidden { display:none !important; }
-  .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; }
-  .num { text-align:right; }
+  .ic { width:16px; height:16px; flex:none; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .ic.lg { width:20px; height:20px; }
+
+  /* ---------- Login ---------- */
+  #login { min-height:100%; display:grid; place-items:center; padding:24px 16px;
+    background: radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 60%), radial-gradient(900px 500px at 110% 110%, #e0e7ff 0%, transparent 55%), var(--bg); }
+  .login-card { width:100%; max-width:400px; background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-lg); padding:32px; }
+  .brand-mark { width:48px; height:48px; border-radius:12px; display:grid; place-items:center; color:#fff;
+    background:linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow:0 6px 16px -6px rgba(37,99,235,.6); }
+  .brand-mark .ic { width:26px; height:26px; stroke-width:2.2; }
+  .login-card h1 { font-size:22px; margin:18px 0 4px; letter-spacing:-.01em; }
+  .login-card .sub { color:var(--muted); margin:0 0 24px; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-weight:600; font-size:13px; color:var(--text-2); margin-bottom:6px; }
+  .input-icon { position:relative; }
+  .input-icon > .ic { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; }
+  .input-icon input { width:100%; height:42px; padding-left:38px; }
+  .input-icon .reveal-pw { position:absolute; right:6px; top:50%; transform:translateY(-50%); }
+  .login-card .btn.primary { width:100%; height:42px; justify-content:center; font-size:15px; margin-top:6px; }
+  .login-foot { display:flex; align-items:center; gap:6px; justify-content:center; color:var(--muted); font-size:12px; margin-top:20px; }
+
+  /* ---------- App shell ---------- */
+  #shell { display:grid; grid-template-columns:240px 1fr; min-height:100%; }
+  .sidebar { background:var(--surface); border-right:1px solid var(--line); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; }
+  .side-brand { display:flex; align-items:center; gap:10px; padding:18px 18px 14px; }
+  .side-brand .brand-mark { width:34px; height:34px; border-radius:9px; }
+  .side-brand .brand-mark .ic { width:19px; height:19px; }
+  .side-brand b { font-size:15px; letter-spacing:-.01em; }
+  .side-brand small { display:block; color:var(--muted); font-size:11px; font-weight:500; }
+  #nav { display:flex; flex-direction:column; gap:2px; padding:8px 10px; flex:1; }
+  .nav-label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; padding:14px 10px 6px; }
+  #nav button { display:flex; align-items:center; gap:10px; width:100%; border:0; background:none; padding:9px 10px; border-radius:8px;
+    color:var(--text-2); font:inherit; font-weight:500; cursor:pointer; text-align:left; }
+  #nav button:hover { background:var(--surface-2); color:var(--text); }
+  #nav button.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  #nav button .ic { color:var(--muted); }
+  #nav button.active .ic { color:var(--accent); }
+  .side-user { border-top:1px solid var(--line); padding:12px; display:flex; align-items:center; gap:10px; }
+  .avatar { width:34px; height:34px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:grid; place-items:center; font-weight:700; font-size:13px; flex:none; }
+  .side-user .who { flex:1; min-width:0; }
+  .side-user .who b { display:block; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .side-user .who span { font-size:11px; color:var(--muted); }
+
+  .content { min-width:0; }
+  .page-head { padding:22px 28px 6px; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .page-head h2 { margin:0; font-size:20px; letter-spacing:-.01em; }
+  .page-head p { margin:2px 0 0; color:var(--muted); }
+  main { padding:16px 28px 40px; max-width:1320px; }
+
+  /* ---------- Building blocks ---------- */
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; margin-bottom:16px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .card-head h3 { margin:0; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .card-head h3 .ic { color:var(--muted); }
+  .card.flush { padding:0; overflow:hidden; }
+  .card.flush .card-head { padding:16px 18px 0; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .grow { flex:1; }
+  .muted { color:var(--muted); }
+  .small { font-size:12px; }
+  .mono { font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-size:13px; }
+  .err { color:var(--bad); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+
+  input, select { font:inherit; color:var(--text); height:36px; padding:0 11px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+  input[type=checkbox] { height:auto; width:16px; height:16px; accent-color:var(--accent); vertical-align:middle; margin:0; }
+  input[type=file] { height:auto; padding:6px; background:var(--surface-2); }
+  input:focus, select:focus { outline:none; border-color:#93c5fd; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+  label.check { display:inline-flex; align-items:center; gap:7px; color:var(--text-2); cursor:pointer; user-select:none; }
+  label.fld { display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--muted); }
+  .search { position:relative; flex:1; min-width:220px; }
+  .search .ic { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--muted); }
+  .search input { width:100%; padding-left:34px; }
+
+  .btn { display:inline-flex; align-items:center; gap:7px; height:36px; padding:0 13px; border:1px solid var(--line); border-radius:8px;
+    background:var(--surface); color:var(--text-2); font:inherit; font-weight:500; cursor:pointer; white-space:nowrap; transition:background .12s, border-color .12s; }
+  .btn:hover:not(:disabled) { background:var(--surface-2); border-color:#cbd5e1; color:var(--text); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover:not(:disabled) { background:var(--accent-2); border-color:var(--accent-2); color:#fff; }
+  .btn.danger { color:var(--bad); border-color:#fecaca; }
+  .btn.danger:hover:not(:disabled) { background:var(--bad-soft); border-color:#fca5a5; color:var(--bad); }
+  .btn.sm { height:30px; padding:0 10px; font-size:13px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .icon-btn { display:inline-grid; place-items:center; width:32px; height:32px; border:1px solid transparent; border-radius:8px; background:none;
+    color:var(--muted); cursor:pointer; transition:background .12s, color .12s; }
+  .icon-btn:hover:not(:disabled) { background:var(--surface-2); border-color:var(--line); color:var(--text); }
+  .icon-btn.danger:hover:not(:disabled) { background:var(--bad-soft); border-color:#fecaca; color:var(--bad); }
+  .icon-btn.ok:hover:not(:disabled) { background:var(--ok-soft); color:var(--ok); }
+  .icon-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .actions { display:flex; gap:2px; justify-content:flex-end; white-space:nowrap; }
+  a.link { color:var(--accent); cursor:pointer; text-decoration:none; font-weight:500; }
+  a.link:hover { text-decoration:underline; }
+
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line-2); vertical-align:middle; }
+  thead th { background:var(--surface-2); color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line); white-space:nowrap; }
+  tbody tr:hover td { background:#fbfcfe; }
+  tbody tr:last-child td { border-bottom:0; }
+  tr.muted td { color:var(--muted); }
+  td.empty { text-align:center; color:var(--muted); padding:28px 12px; }
+  td input.edit { width:100%; min-width:110px; height:32px; }
   table.no-grp .grp { display:none; }
-  button.danger { color:var(--bad); border-color:#fca5a5; }
-  button.danger:not(:disabled):hover { background:#fee2e2; }
-  td input.edit { width:100%; min-width:90px; padding:4px 6px; }
-  .tag.ALLOTTED { background:#dcfce7; color:var(--ok); font-weight:600; } .tag.NOT_ALLOTTED { background:#f3f4f6; color:var(--muted); }
-  .tag.NOT_APPLIED { background:#e0e7ff; color:#4338ca; } .tag.ERROR { background:#fee2e2; color:var(--bad); } .tag.PENDING { background:#fef3c7; color:var(--warn); }
-  .bar { height:8px; background:#eef0f3; border-radius:4px; margin-top:6px; overflow:hidden; } .bar > div { height:100%; background:var(--accent); width:0; transition:width .4s; }
-  a.link { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .table-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border-top:1px solid var(--line); background:var(--surface-2); }
+  .pager { display:flex; gap:6px; align-items:center; }
+
+  .tag { display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; background:var(--line-2); color:var(--text-2); white-space:nowrap; }
+  .tag::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.7; }
+  .tag.plain::before { display:none; }
+  .tag.ALLOTTED, .tag.create { background:var(--ok-soft); color:var(--ok); }
+  .tag.NOT_ALLOTTED, .tag.unchanged { background:var(--line-2); color:var(--muted); }
+  .tag.NOT_APPLIED { background:var(--info-soft); color:var(--info); }
+  .tag.ERROR, .tag.error { background:var(--bad-soft); color:var(--bad); }
+  .tag.PENDING, .tag.update { background:var(--warn-soft); color:var(--warn); }
+  .tag.ADMIN { background:var(--accent-soft); color:var(--accent); }
+
+  .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; margin-bottom:16px; }
+  .stats > div { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px 16px; }
+  .stats > div b { display:block; font-size:22px; font-weight:700; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+  .stats > div span, .stats > div a { font-size:12px; font-weight:500; }
+  .stats > div.k-ALLOTTED { border-top:3px solid var(--ok); } .stats > div.k-NOT_ALLOTTED { border-top:3px solid #94a3b8; }
+  .stats > div.k-NOT_APPLIED { border-top:3px solid var(--info); } .stats > div.k-ERROR { border-top:3px solid var(--bad); }
+  .stats > div.k-PENDING { border-top:3px solid var(--warn); }
+  .stats > .note { grid-column:1 / -1; background:none; border:0; box-shadow:none; padding:0; color:var(--muted); font-size:12px; }
+
+  .bar { height:8px; background:var(--line-2); border-radius:99px; overflow:hidden; margin-top:8px; }
+  .bar > div { height:100%; background:linear-gradient(90deg, #3b82f6, #2563eb); width:0; transition:width .4s; }
+  .callout { display:flex; gap:10px; align-items:flex-start; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:var(--text-2); font-size:13px; }
+  .callout .ic { color:var(--muted); margin-top:2px; }
+  .callout.warn { background:#fffbeb; border-color:#fde68a; } .callout.warn .ic { color:var(--warn); }
+  .msg { font-size:13px; color:var(--muted); }
+  .msg.err { color:var(--bad); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chips label { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); border-radius:999px; padding:5px 12px; background:var(--surface); cursor:pointer; }
+  .chips label:has(input:checked) { border-color:#93c5fd; background:var(--accent-soft); }
+  .form-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px; align-items:end; }
+
+  /* Tooltip (positioned by JS so it never gets clipped by tables) */
+  #tip { position:fixed; z-index:1000; background:#0f172a; color:#fff; font-size:12px; font-weight:500; padding:5px 9px; border-radius:6px;
+    pointer-events:none; white-space:nowrap; opacity:0; transform:translateY(2px); transition:opacity .1s, transform .1s; }
+  #tip.show { opacity:1; transform:none; }
+  #toasts { position:fixed; right:20px; bottom:20px; display:flex; flex-direction:column; gap:8px; z-index:1001; }
+  .toast { display:flex; align-items:center; gap:9px; background:#0f172a; color:#fff; padding:10px 14px; border-radius:10px; box-shadow:var(--shadow-lg); font-size:13px; animation:tin .18s ease-out; }
+  .toast.err { background:var(--bad); }
+  @keyframes tin { from { opacity:0; transform:translateY(6px); } }
+  .spin { animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  @media (max-width: 900px) {
+    #shell { grid-template-columns:1fr; }
+    .sidebar { position:static; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; border-right:0; border-bottom:1px solid var(--line); }
+    #nav { flex-direction:row; overflow-x:auto; padding:6px; flex-basis:100%; order:3; }
+    #nav button { width:auto; } .nav-label { display:none; }
+    .side-user { border-top:0; margin-left:auto; }
+    .page-head, main { padding-left:16px; padding-right:16px; }
+  }
 </style>
 </head>
 <body>
 
-<div id="login" class="card hidden">
-  <h2 style="margin-top:0">Sign in</h2>
-  <form id="loginForm">
-    <input name="email" type="text" placeholder="Username or email" required autocomplete="username">
-    <input name="password" type="password" placeholder="Password" required autocomplete="current-password">
-    <button class="btn primary" style="width:100%">Sign in</button>
-    <p id="loginErr" class="err"></p>
-  </form>
+<!-- Icons (Lucide, ISC licence), inline so the app works offline -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M6 10h4"/><path d="M6 14h8"/><circle cx="17" cy="11" r="1.5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/></symbol>
+  <symbol id="i-resume" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></symbol>
+</svg>
+
+<div id="tip" role="tooltip"></div>
+<div id="toasts" aria-live="polite"></div>
+
+<!-- ================= Login ================= -->
+<div id="login" class="hidden">
+  <div class="login-card">
+    <div class="brand-mark"><svg class="ic"><use href="#i-logo"/></svg></div>
+    <h1>Allotment Checker</h1>
+    <p class="sub">Sign in to check IPO allotment status for your clients.</p>
+    <form id="loginForm" novalidate>
+      <div class="field">
+        <label for="loginUser">Username</label>
+        <div class="input-icon"><svg class="ic"><use href="#i-user"/></svg>
+          <input id="loginUser" name="email" type="text" placeholder="e.g. superadmin" required autocomplete="username" autofocus></div>
+      </div>
+      <div class="field">
+        <label for="loginPw">Password</label>
+        <div class="input-icon"><svg class="ic"><use href="#i-lock"/></svg>
+          <input id="loginPw" name="password" type="password" placeholder="Your password" required autocomplete="current-password">
+          <button type="button" class="icon-btn reveal-pw" id="togglePw" data-tip="Show password" aria-label="Show password"><svg class="ic"><use href="#i-eye"/></svg></button></div>
+      </div>
+      <div id="loginErr" class="callout warn hidden" role="alert"><svg class="ic"><use href="#i-alert"/></svg><span></span></div>
+      <button class="btn primary" id="loginBtn" type="submit"><span>Sign in</span><svg class="ic"><use href="#i-arrow-right"/></svg></button>
+    </form>
+    <div class="login-foot"><svg class="ic"><use href="#i-shield"/></svg> PAN numbers are stored encrypted</div>
+  </div>
 </div>
 
+<!-- ================= App ================= -->
 <div id="shell" class="hidden">
-  <header>
-    <h1>Allotment Checker</h1>
+  <aside class="sidebar">
+    <div class="side-brand">
+      <div class="brand-mark"><svg class="ic"><use href="#i-logo"/></svg></div>
+      <div><b>Allotment Checker</b><small>IPO allotment status</small></div>
+    </div>
     <nav id="nav">
-      <button data-view="ipos" class="active">IPOs</button>
-      <button data-view="reports">Reports</button>
-      <button data-view="pans">PANs</button>
-      <button data-view="import" data-admin>Import</button>
-      <button data-view="users" data-admin>Users</button>
-      <button data-view="audit" data-admin>Audit log</button>
+      <div class="nav-label">Workspace</div>
+      <button data-view="ipos" class="active"><svg class="ic"><use href="#i-trend"/></svg>IPOs</button>
+      <button data-view="reports"><svg class="ic"><use href="#i-chart"/></svg>Reports</button>
+      <button data-view="pans"><svg class="ic"><use href="#i-card"/></svg>PANs</button>
+      <div class="nav-label" data-admin>Admin</div>
+      <button data-view="import" data-admin><svg class="ic"><use href="#i-upload"/></svg>Import PANs</button>
+      <button data-view="users" data-admin><svg class="ic"><use href="#i-users"/></svg>Users</button>
+      <button data-view="audit" data-admin><svg class="ic"><use href="#i-shield"/></svg>Audit log</button>
     </nav>
-    <span id="me" class="muted"></span>
-    <button class="btn" id="logout">Sign out</button>
-  </header>
+    <div class="side-user">
+      <div class="avatar" id="avatar"></div>
+      <div class="who"><b id="meName"></b><span id="meRole"></span></div>
+      <button class="icon-btn" id="logout" data-tip="Sign out" aria-label="Sign out"><svg class="ic"><use href="#i-logout"/></svg></button>
+    </div>
+  </aside>
 
-  <main>
-    <section id="view-ipos">
-      <div class="card hidden" id="todayCard">
-        <div class="row" style="justify-content:space-between">
-          <b>Today's allotments</b>
-          <span class="row"><span id="schedInfo" class="muted"></span><button class="btn hidden" id="schedRun" data-admin-inline>Run scheduler now</button></span>
-        </div>
-        <table style="margin-top:8px"><tbody id="todayRows"></tbody></table>
-      </div>
-      <div class="card">
-        <div class="row">
-          <b style="margin-right:8px">Add IPO</b>
-          <button class="btn" id="loadLive">Show live IPOs at all registrars</button>
-          <button class="btn hidden" id="refreshLive">Refresh</button>
-          <label class="muted hidden" id="untrackedWrap"><input type="checkbox" id="untrackedOnly" checked> Untracked only</label>
-          <span id="liveMsg" class="muted"></span>
-        </div>
-        <table id="liveTable" class="hidden" style="margin-top:10px"><thead><tr><th>Registrar</th><th>IPO</th><th>Allotment date</th><th></th></tr></thead><tbody id="liveRows"></tbody></table>
-      </div>
-      <div class="card hidden" id="calCard">
-        <b>Upcoming dates</b>
-        <table style="margin-top:8px"><tbody id="calRows"></tbody></table>
-      </div>
-      <div class="card">
-        <table><thead><tr><th>IPO</th><th>Registrar</th><th>Allotment</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Not applied</th>
-          <th class="num">Errors</th><th class="num">Unchecked</th><th>Last check</th><th></th></tr></thead>
-        <tbody id="ipoRows"></tbody></table>
-      </div>
-    </section>
+  <div class="content">
+    <div class="page-head">
+      <div><h2 id="pageTitle">IPOs</h2><p id="pageSub"></p></div>
+      <div id="pageActions" class="row"></div>
+    </div>
 
-    <section id="view-ipo" class="hidden">
-      <div class="card">
-        <div class="row" style="justify-content:space-between">
-          <div><button class="btn" id="backToIpos">‹ IPOs</button> <b id="ipoTitle" style="font-size:16px;margin-left:8px"></b> <span id="ipoSub" class="muted"></span></div>
-          <div class="row">
-            <button class="btn primary" data-scope="unchecked">Check unchecked</button>
-            <button class="btn" data-scope="failed">Re-check errors</button>
-            <button class="btn" data-scope="errors">Re-check errors + not applied</button>
-            <button class="btn" data-scope="all">Re-check all</button>
+    <main>
+      <!-- ---------- IPOs ---------- -->
+      <section id="view-ipos">
+        <div class="card hidden" id="todayCard">
+          <div class="card-head">
+            <h3><svg class="ic"><use href="#i-clock"/></svg>Today's allotments</h3>
+            <span class="row"><span id="schedInfo" class="muted small"></span>
+              <button class="btn sm hidden" id="schedRun" data-admin-inline><svg class="ic"><use href="#i-zap"/></svg>Run scheduler now</button></span>
+          </div>
+          <div class="table-wrap"><table><tbody id="todayRows"></tbody></table></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><svg class="ic"><use href="#i-plus"/></svg>Add IPO</h3>
+            <span class="row">
+              <label class="check hidden" id="untrackedWrap"><input type="checkbox" id="untrackedOnly" checked> Untracked only</label>
+              <button class="icon-btn hidden" id="refreshLive" data-tip="Refresh from registrars" aria-label="Refresh"><svg class="ic"><use href="#i-refresh"/></svg></button>
+              <button class="btn primary" id="loadLive"><svg class="ic"><use href="#i-search"/></svg>Show live IPOs at all registrars</button>
+            </span>
+          </div>
+          <div id="liveMsg" class="msg"></div>
+          <div class="table-wrap"><table id="liveTable" class="hidden" style="margin-top:10px"><thead><tr><th>Registrar</th><th>IPO</th><th>Allotment date</th><th></th></tr></thead><tbody id="liveRows"></tbody></table></div>
+        </div>
+
+        <div class="card hidden" id="calCard">
+          <div class="card-head"><h3><svg class="ic"><use href="#i-calendar"/></svg>Upcoming dates</h3></div>
+          <div class="table-wrap"><table><tbody id="calRows"></tbody></table></div>
+        </div>
+
+        <div class="card flush">
+          <div class="card-head"><h3><svg class="ic"><use href="#i-list"/></svg>Tracked IPOs</h3></div>
+          <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>IPO</th><th>Registrar</th><th>Allotment</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Not applied</th>
+            <th class="num">Errors</th><th class="num">Unchecked</th><th>Last check</th><th></th></tr></thead>
+          <tbody id="ipoRows"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- IPO detail ---------- -->
+      <section id="view-ipo" class="hidden">
+        <div class="card">
+          <div class="card-head">
+            <div class="row"><button class="icon-btn" id="backToIpos" data-tip="Back to IPOs" aria-label="Back"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+              <div><b id="ipoTitle" style="font-size:16px"></b><div id="ipoSub" class="muted small"></div></div></div>
+            <div class="row">
+              <button class="btn primary" data-scope="unchecked"><svg class="ic"><use href="#i-play"/></svg>Check unchecked</button>
+              <button class="btn" data-scope="failed" data-tip="Check again only the PANs that had errors"><svg class="ic"><use href="#i-refresh"/></svg>Re-check errors</button>
+              <button class="btn" data-scope="errors" data-tip="Errors plus PANs shown as not applied"><svg class="ic"><use href="#i-refresh"/></svg>Errors + not applied</button>
+              <button class="btn" data-scope="all" data-tip="Check every PAN again"><svg class="ic"><use href="#i-refresh"/></svg>Re-check all</button>
+            </div>
+          </div>
+          <div id="jobBox" class="hidden callout" style="display:block">
+            <div class="row" style="justify-content:space-between"><span id="jobText"></span>
+              <button class="btn sm danger" id="cancelJob"><svg class="ic"><use href="#i-x-circle"/></svg>Cancel</button></div>
+            <div class="bar"><div id="jobBar"></div></div>
+          </div>
+          <p id="ipoMsg" class="msg" style="margin:10px 0 0"></p>
+        </div>
+
+        <div class="stats" id="ipoStats"></div>
+
+        <div class="card">
+          <div class="card-head"><h3><svg class="ic"><use href="#i-calendar"/></svg>Dates & prices</h3><span id="ipoSaveMsg" class="msg"></span></div>
+          <div class="form-grid">
+            <label class="fld">Allotment date<input type="date" id="ipoAllot"></label>
+            <label class="fld">Listing date<input type="date" id="ipoList"></label>
+            <label class="fld">Issue price (₹)<input type="number" id="ipoIssue" min="0" step="0.01" placeholder="e.g. 540"></label>
+            <label class="fld">Listing price (₹)<input type="number" id="ipoListPrice" min="0" step="0.01" placeholder="e.g. 612.50"></label>
+            <label class="check" style="height:36px"><input type="checkbox" id="ipoAuto"> Auto-check on allotment day</label>
+            <div class="row">
+              <button class="btn primary" id="ipoSave"><svg class="ic"><use href="#i-save"/></svg>Save</button>
+              <button class="btn" id="ipoArchive" data-admin-inline></button>
+            </div>
           </div>
         </div>
-        <div class="row" style="margin-top:12px">
-          <label class="muted">Allotment date <input type="date" id="ipoAllot"></label>
-          <label class="muted">Listing date <input type="date" id="ipoList"></label>
-          <label class="muted">Issue price ₹ <input type="number" id="ipoIssue" min="0" step="0.01" style="width:100px"></label>
-          <label class="muted">Listing price ₹ <input type="number" id="ipoListPrice" min="0" step="0.01" style="width:100px"></label>
-          <label class="muted"><input type="checkbox" id="ipoAuto"> Auto-check on allotment day</label>
-          <button class="btn" id="ipoSave">Save</button>
-          <button class="btn" id="ipoArchive" data-admin-inline>Archive</button>
-          <span id="ipoSaveMsg" class="muted"></span>
-        </div>
-        <div id="jobBox" class="hidden" style="margin-top:12px">
-          <div class="row"><span id="jobText"></span><button class="btn" id="cancelJob">Cancel</button></div>
-          <div class="bar"><div id="jobBar"></div></div>
-        </div>
-        <p id="ipoMsg"></p>
-      </div>
-      <div class="card stats" id="ipoStats"></div>
-      <div class="card">
-        <div class="row" style="margin-bottom:10px">
-          <select id="resStatus"><option value="">All statuses</option><option value="ALLOTTED">Allotted</option><option value="NOT_ALLOTTED">Not allotted</option>
-            <option value="NOT_APPLIED">Not applied</option><option value="ERROR">Error</option><option value="PENDING">Unchecked</option></select>
-          <select id="resClient"><option value="">All clients</option></select>
-          <input id="resQ" placeholder="Search name" style="flex:1;min-width:200px">
-          <label class="muted" data-admin-inline><input type="checkbox" id="resFullPan"> Full PANs</label>
-          <button class="btn" id="resExport">Download Excel</button>
-        </div>
-        <table><thead><tr><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Status</th><th class="num">Applied</th><th class="num">Allotted</th>
-          <th>Category</th><th class="num">Price</th><th class="num">Amt adjusted</th><th>Checked</th></tr></thead>
-        <tbody id="resRows"></tbody></table>
-        <div class="pager"><button class="btn" id="resPrev">‹ Prev</button><span id="resPage" class="muted"></span><button class="btn" id="resNext">Next ›</button></div>
-      </div>
-    </section>
 
-    <section id="view-reports" class="hidden">
-      <div class="card">
-        <div class="row">
-          <label class="muted">From <input type="date" id="repFrom"></label>
-          <label class="muted">To <input type="date" id="repTo"></label>
-          <select id="repClient"><option value="">All clients</option></select>
-          <select id="repRegistrar"><option value="">All registrars</option></select>
-          <select id="repIpo"><option value="">All IPOs</option></select>
-          <select id="repGroup"><option value="client">Group by client</option><option value="pan">Group by PAN</option></select>
-          <span style="flex:1"></span>
-          <label class="muted" data-admin-inline><input type="checkbox" id="repFullPan"> Full PANs</label>
-          <button class="btn primary" id="repExport">Download Excel</button>
+        <div class="card flush">
+          <div class="card-head">
+            <h3><svg class="ic"><use href="#i-list"/></svg>Results</h3>
+            <div class="row">
+              <select id="resStatus"><option value="">All statuses</option><option value="ALLOTTED">Allotted</option><option value="NOT_ALLOTTED">Not allotted</option>
+                <option value="NOT_APPLIED">Not applied</option><option value="ERROR">Error</option><option value="PENDING">Unchecked</option></select>
+              <select id="resClient"><option value="">All clients</option></select>
+              <div class="search" style="min-width:200px"><svg class="ic"><use href="#i-search"/></svg><input id="resQ" placeholder="Search name"></div>
+              <label class="check" data-admin-inline data-tip="Include full PAN numbers (recorded in the audit log)"><input type="checkbox" id="resFullPan"> Full PANs</label>
+              <button class="btn" id="resExport"><svg class="ic"><use href="#i-download"/></svg>Download Excel</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Status</th><th class="num">Applied</th><th class="num">Allotted</th>
+            <th>Category</th><th class="num">Price</th><th class="num">Amt adjusted</th><th>Checked</th></tr></thead>
+          <tbody id="resRows"></tbody></table></div>
+          <div class="table-foot"><span id="resPage" class="muted small"></span>
+            <div class="pager"><button class="icon-btn" id="resPrev" data-tip="Previous page" aria-label="Previous"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+              <button class="icon-btn" id="resNext" data-tip="Next page" aria-label="Next"><svg class="ic"><use href="#i-chev-right"/></svg></button></div></div>
         </div>
-        <p class="muted" style="margin:8px 0 0">Dates match the IPO's allotment date (or the date it was added, if none is set).
-          Only applications actually found count as "applied"; Not applied and errors are left out of the ratio.</p>
-      </div>
-      <div class="card stats" id="repStats"></div>
-      <div class="card">
-        <table><thead id="repHead"></thead><tbody id="repRows"></tbody></table>
-      </div>
-    </section>
+      </section>
 
-    <section id="view-pans" class="hidden">
-      <div class="card row">
-        <input id="q" placeholder="Search name or full PAN" style="flex:1;min-width:220px">
-        <select id="clientFilter"><option value="">All clients</option></select>
-        <label class="muted"><input type="checkbox" id="inactive"> Show inactive</label>
-      </div>
-      <div class="card hidden" id="delFileCard" data-admin-inline>
-        <div class="row">
-          <b>Delete PANs from Excel</b>
-          <input type="file" id="delFile" accept=".xlsx,.csv">
-          <button class="btn" id="delPreview">Preview</button>
-          <button class="btn danger" id="delCommit" disabled>Delete matched PANs</button>
-          <button class="btn" data-template="delete">Download delete format</button>
-          <span id="delMsg" class="muted"></span>
+      <!-- ---------- Reports ---------- -->
+      <section id="view-reports" class="hidden">
+        <div class="card">
+          <div class="row">
+            <label class="fld">From<input type="date" id="repFrom"></label>
+            <label class="fld">To<input type="date" id="repTo"></label>
+            <label class="fld">Client<select id="repClient"><option value="">All clients</option></select></label>
+            <label class="fld">Registrar<select id="repRegistrar"><option value="">All registrars</option></select></label>
+            <label class="fld">IPO<select id="repIpo"><option value="">All IPOs</option></select></label>
+            <label class="fld">View<select id="repGroup"><option value="client">Group by client</option><option value="pan">Group by PAN</option></select></label>
+            <span class="grow"></span>
+            <label class="check" data-admin-inline data-tip="Include full PAN numbers (recorded in the audit log)"><input type="checkbox" id="repFullPan"> Full PANs</label>
+            <button class="btn primary" id="repExport"><svg class="ic"><use href="#i-download"/></svg>Download Excel</button>
+          </div>
+          <div class="callout" style="margin-top:14px"><svg class="ic"><use href="#i-info"/></svg>
+            <span>Dates match the IPO's allotment date (or the date it was added, if none is set). Only applications actually found count as
+              "applied"; Not applied and errors are left out of the ratio.</span></div>
         </div>
-        <div id="delResult" style="margin-top:8px"></div>
-      </div>
-      <div class="card">
-        <div class="row" style="justify-content:space-between">
-          <span class="muted" id="panCount"></span>
-          <span class="row" data-admin-inline>
-            <span id="selInfo" class="muted"></span>
-            <a class="link hidden" id="selAll"></a>
-            <button class="btn danger" id="bulkDelete" disabled>Delete selected</button>
-            <button class="btn" id="showDelFile">Delete from Excel…</button>
-          </span>
-        </div>
-        <table><thead><tr><th data-admin-inline style="width:28px"><input type="checkbox" id="selPage" title="Select this page"></th>
-          <th>PAN</th><th>Name</th><th class="grp">Client</th><th>Mobile</th><th>DP / Client ID</th><th></th></tr></thead>
-        <tbody id="panRows"></tbody></table>
-        <p class="muted" style="margin:8px 0 0" data-admin-inline>Deleting erases the full PAN permanently. Its past IPO results stay in
-          Reports with the masked PAN, holder name and client. Use Deactivate to pause a PAN instead.</p>
-        <div class="pager"><button class="btn" id="prev">‹ Prev</button><span id="pageInfo" class="muted"></span><button class="btn" id="next">Next ›</button></div>
-      </div>
-    </section>
+        <div class="stats" id="repStats"></div>
+        <div class="card flush"><div class="table-wrap"><table><thead id="repHead"></thead><tbody id="repRows"></tbody></table></div></div>
+      </section>
 
-    <section id="view-import" class="hidden">
-      <div class="card">
-        <h3 style="margin-top:0">Import PANs from Excel / CSV</h3>
-        <p class="muted">Required columns: <b>PAN</b>, <b>Name</b>. Optional: <b>Client</b> (or Group / Family), <b>Mobile</b>, <b>DP ID</b>.
-          Without a Client column, each holder becomes their own client. Existing PANs are updated, not duplicated, so re-upload the
-          same file with corrections to bulk-edit names, mobiles or DP IDs.
-          <button class="btn" data-template="pans">Download import format</button></p>
-        <div id="importIpos" style="margin:10px 0">
-          <b>After import, check the new PANs for:</b>
-          <div id="importIpoList" class="row" style="margin-top:6px"></div>
+      <!-- ---------- PANs ---------- -->
+      <section id="view-pans" class="hidden">
+        <div class="card hidden" id="delFileCard" data-admin-inline>
+          <div class="card-head"><h3><svg class="ic"><use href="#i-trash"/></svg>Delete PANs from Excel</h3>
+            <button class="btn sm" data-template="delete"><svg class="ic"><use href="#i-file"/></svg>Download delete format</button></div>
+          <div class="row">
+            <input type="file" id="delFile" accept=".xlsx,.csv">
+            <button class="btn" id="delPreview"><svg class="ic"><use href="#i-eye"/></svg>Preview</button>
+            <button class="btn danger" id="delCommit" disabled><svg class="ic"><use href="#i-trash"/></svg>Delete matched PANs</button>
+            <span id="delMsg" class="msg"></span>
+          </div>
+          <div id="delResult" class="table-wrap" style="margin-top:10px"></div>
         </div>
-        <div class="row">
-          <input type="file" id="file" accept=".xlsx,.csv">
-          <button class="btn" id="preview">Preview</button>
-          <button class="btn primary" id="commit" disabled>Import</button>
-          <label class="muted hidden" id="skipWrap"><input type="checkbox" id="skipErrors"> Skip rows with errors</label>
+
+        <div class="card flush">
+          <div class="card-head">
+            <div class="row grow">
+              <div class="search"><svg class="ic"><use href="#i-search"/></svg><input id="q" placeholder="Search name or full PAN"></div>
+              <select id="clientFilter"><option value="">All clients</option></select>
+              <label class="check"><input type="checkbox" id="inactive"> Show inactive</label>
+            </div>
+            <span class="row" data-admin-inline>
+              <span id="selInfo" class="muted small"></span>
+              <a class="link small hidden" id="selAll"></a>
+              <button class="btn danger" id="bulkDelete" disabled><svg class="ic"><use href="#i-trash"/></svg>Delete selected</button>
+              <button class="btn" id="showDelFile"><svg class="ic"><use href="#i-file"/></svg>Delete from Excel</button>
+            </span>
+          </div>
+          <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th data-admin-inline style="width:36px"><input type="checkbox" id="selPage" aria-label="Select this page"></th>
+            <th>PAN</th><th>Name</th><th class="grp">Client</th><th>Mobile</th><th>DP / Client ID</th><th class="num" data-admin-inline>Actions</th></tr></thead>
+          <tbody id="panRows"></tbody></table></div>
+          <div class="table-foot"><span class="muted small" id="panCount"></span>
+            <div class="pager"><span id="pageInfo" class="muted small"></span>
+              <button class="icon-btn" id="prev" data-tip="Previous page" aria-label="Previous"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+              <button class="icon-btn" id="next" data-tip="Next page" aria-label="Next"><svg class="ic"><use href="#i-chev-right"/></svg></button></div></div>
         </div>
-        <p id="importMsg"></p>
-        <div id="importChecks"></div>
-      </div>
-      <div id="importResult" class="hidden">
-        <div class="card stats" id="importStats"></div>
-        <div class="card" id="importErrorsCard"><h4 style="margin-top:0">Errors</h4><table><thead><tr><th>Row</th><th>Problem</th></tr></thead><tbody id="importErrors"></tbody></table></div>
-        <div class="card"><table><thead><tr><th>Row</th><th>Action</th><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Changes</th></tr></thead><tbody id="importRows"></tbody></table></div>
-      </div>
-    </section>
+        <div class="callout" data-admin-inline><svg class="ic"><use href="#i-info"/></svg>
+          <span><b>Delete</b> erases the full PAN permanently; its past IPO results stay in Reports with the masked PAN and name.
+            Use <b>Deactivate</b> to pause a PAN instead.</span></div>
+      </section>
 
-    <section id="view-users" class="hidden">
-      <div class="card">
-        <h3 style="margin-top:0">Add user</h3>
-        <form id="userForm" class="row">
-          <input name="name" placeholder="Name" required>
-          <input name="email" type="text" placeholder="Username or email" required>
-          <input name="password" type="password" placeholder="Password (10+ chars)" minlength="10" required autocomplete="new-password">
-          <select name="role"><option>OPERATOR</option><option>ADMIN</option></select>
-          <button class="btn primary">Add</button>
-          <span id="userMsg"></span>
-        </form>
-      </div>
-      <div class="card"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div>
-    </section>
+      <!-- ---------- Import ---------- -->
+      <section id="view-import" class="hidden">
+        <div class="card">
+          <div class="card-head"><h3><svg class="ic"><use href="#i-upload"/></svg>Upload PAN Excel / CSV</h3>
+            <button class="btn sm" data-template="pans"><svg class="ic"><use href="#i-file"/></svg>Download import format</button></div>
+          <div class="callout" style="margin-bottom:14px"><svg class="ic"><use href="#i-info"/></svg>
+            <span>Required columns: <b>PAN</b>, <b>Name</b>. Optional: <b>Client</b> (or Group / Family), <b>Mobile</b>, <b>DP ID</b>.
+              Existing PANs are updated, never duplicated, so re-upload a corrected file to bulk-edit names, mobiles or DP IDs.</span></div>
+          <div id="importIpos" style="margin-bottom:14px">
+            <div class="small muted" style="font-weight:600;margin-bottom:8px">After import, check the new PANs for:</div>
+            <div id="importIpoList" class="chips"></div>
+          </div>
+          <div class="row">
+            <input type="file" id="file" accept=".xlsx,.csv">
+            <button class="btn" id="preview"><svg class="ic"><use href="#i-eye"/></svg>Preview</button>
+            <button class="btn primary" id="commit" disabled><svg class="ic"><use href="#i-upload"/></svg>Import</button>
+            <label class="check hidden" id="skipWrap"><input type="checkbox" id="skipErrors"> Skip rows with errors</label>
+          </div>
+          <p id="importMsg" class="msg"></p>
+          <div id="importChecks"></div>
+        </div>
+        <div id="importResult" class="hidden">
+          <div class="stats" id="importStats"></div>
+          <div class="card flush" id="importErrorsCard"><div class="card-head"><h3><svg class="ic"><use href="#i-alert"/></svg>Errors</h3></div>
+            <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Row</th><th>Problem</th></tr></thead><tbody id="importErrors"></tbody></table></div></div>
+          <div class="card flush"><div class="table-wrap"><table><thead><tr><th>Row</th><th>Action</th><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Changes</th></tr></thead><tbody id="importRows"></tbody></table></div></div>
+        </div>
+      </section>
 
-    <section id="view-audit" class="hidden">
-      <div class="card"><table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Details</th><th>IP</th></tr></thead><tbody id="auditRows"></tbody></table></div>
-    </section>
-  </main>
+      <!-- ---------- Users ---------- -->
+      <section id="view-users" class="hidden">
+        <div class="card">
+          <div class="card-head"><h3><svg class="ic"><use href="#i-user-plus"/></svg>Add user</h3><span id="userMsg" class="msg"></span></div>
+          <form id="userForm" class="form-grid">
+            <label class="fld">Name<input name="name" placeholder="Full name" required></label>
+            <label class="fld">Username<input name="email" type="text" placeholder="Username or email" required></label>
+            <label class="fld">Password<input name="password" type="password" placeholder="10+ characters" minlength="10" required autocomplete="new-password"></label>
+            <label class="fld">Role<select name="role"><option value="OPERATOR">Operator</option><option value="ADMIN">Admin</option></select></label>
+            <div><button class="btn primary"><svg class="ic"><use href="#i-plus"/></svg>Add user</button></div>
+          </form>
+        </div>
+        <div class="card flush"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th class="num">Actions</th></tr></thead><tbody id="userRows"></tbody></table></div></div>
+      </section>
+
+      <!-- ---------- Audit ---------- -->
+      <section id="view-audit" class="hidden">
+        <div class="card flush"><div class="table-wrap"><table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Details</th><th>IP</th></tr></thead><tbody id="auditRows"></tbody></table></div></div>
+      </section>
+    </main>
+  </div>
 </div>
 
 <script>
 const $ = (s) => document.querySelector(s);
-// A client named exactly like the holder is just "their own client" (import without a Client
-// column) — not a real group. Client cells/columns are hidden in that case.
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const ic = (name, cls = "") => `<svg class="ic ${cls}"><use href="#i-${name}"/></svg>`;
+/** Icon-only button with a tooltip; `attrs` carries the data-* the click handlers look for. */
+const iconBtn = (name, tip, attrs, cls = "") => `<button type="button" class="icon-btn ${cls}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${attrs}>${ic(name)}</button>`;
+let me = null, page = 1, pageSize = 50;
+
+// ---------- Tooltips & toasts ----------
+const tip = $("#tip");
+function showTip(el) {
+  const text = el.dataset.tip; if (!text) return;
+  tip.textContent = text; tip.classList.add("show");
+  const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+  let top = r.top - t.height - 8; if (top < 4) top = r.bottom + 8;
+  tip.style.top = `${top}px`;
+  tip.style.left = `${Math.min(window.innerWidth - t.width - 6, Math.max(6, r.left + r.width / 2 - t.width / 2))}px`;
+}
+const hideTip = () => tip.classList.remove("show");
+document.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); });
+document.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); if (el) showTip(el); });
+document.addEventListener("focusout", hideTip);
+document.addEventListener("scroll", hideTip, true);
+document.addEventListener("click", hideTip, true);
+
+function toast(text, kind = "ok") {
+  const t = document.createElement("div");
+  t.className = `toast ${kind === "err" ? "err" : ""}`;
+  t.innerHTML = `${ic(kind === "err" ? "alert" : "check-circle")}<span>${esc(text)}</span>`;
+  $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ---------- Client groups (a client named like its holder isn't a real group) ----------
 const sameName = (a, b) => String(a ?? "").replace(/\s+/g, " ").trim().toLowerCase() === String(b ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 const groupOf = (client, holder) => (sameName(client, holder) ? "" : client);
 const grpCell = (client, holder) => `<td class="grp">${esc(groupOf(client, holder))}</td>`;
@@ -263,18 +531,16 @@ const grpCell = (client, holder) => `<td class="grp">${esc(groupOf(client, holde
 function setGroupCol(tbodySel, rows, client, holder) {
   $(tbodySel).closest("table").classList.toggle("no-grp", !rows.some((r) => !sameName(client(r), holder(r))));
 }
-/** Fills a client <select> with real groups only; hides it when there are none. */
+/** Fills a client <select> with real groups only; hides it (and its label) when there are none. */
 function fillGroupSelect(sel, clients, label) {
   const groups = clients.filter((c) => c.isGroup);
   const cur = $(sel).value;
   $(sel).innerHTML = `<option value="">All clients${label ? ` (${groups.length})` : ""}</option>` +
     groups.map((c) => `<option value="${c.id}">${esc(c.name)}${label ? ` (${c.panCount})` : ""}</option>`).join("");
   $(sel).value = groups.some((c) => String(c.id) === cur) ? cur : "";
-  $(sel).classList.toggle("hidden", !groups.length);
+  ($(sel).closest("label.fld") ?? $(sel)).classList.toggle("hidden", !groups.length);
   return groups.length > 0;
 }
-const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
-let me = null, page = 1, pageSize = 50;
 
 async function api(path, opts = {}) {
   const res = await fetch(path, { credentials: "same-origin", ...opts,
@@ -285,10 +551,22 @@ async function api(path, opts = {}) {
   return data;
 }
 
-function showLogin() { $("#shell").classList.add("hidden"); $("#login").classList.remove("hidden"); }
+// ---------- Shell ----------
+const PAGES = {
+  ipos: ["IPOs", "Track IPOs and check allotment for every PAN"],
+  ipo: ["IPO details", ""],
+  reports: ["Reports", "Allotment history across IPOs"],
+  pans: ["PANs", "Your clients' PAN list"],
+  import: ["Import PANs", "Add or update PANs from Excel"],
+  users: ["Users", "Who can sign in"],
+  audit: ["Audit log", "Logins, imports, exports, reveals and deletes"],
+};
+function showLogin() { $("#shell").classList.add("hidden"); $("#login").classList.remove("hidden"); setTimeout(() => $("#loginUser").focus(), 0); }
 function showShell() {
   $("#login").classList.add("hidden"); $("#shell").classList.remove("hidden");
-  $("#me").textContent = `${me.name} · ${me.role}`;
+  $("#meName").textContent = me.name;
+  $("#meRole").textContent = me.role === "ADMIN" ? "Administrator" : "Operator";
+  $("#avatar").textContent = me.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   document.querySelectorAll("[data-admin], [data-admin-inline]").forEach((b) => b.classList.toggle("hidden", me.role !== "ADMIN"));
   show("ipos");
 }
@@ -298,8 +576,12 @@ function show(view) {
   const navView = view === "ipo" ? "ipos" : view;
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === navView));
   document.querySelectorAll("main > section").forEach((s) => s.classList.toggle("hidden", s.id !== `view-${view}`));
+  $("#pageTitle").textContent = PAGES[view][0];
+  $("#pageSub").textContent = PAGES[view][1];
+  window.scrollTo(0, 0);
   ({ ipos: loadIpos, ipo: loadIpo, reports: loadReport, pans: loadPans, users: loadUsers, audit: loadAudit, import: loadImportIpos })[view]();
 }
+$("#nav").addEventListener("click", (e) => { const b = e.target.closest("[data-view]"); if (b) show(b.dataset.view); });
 
 /** Starts a file download from a GET endpoint (same-origin, so the session cookie goes along). */
 function download(url) {
@@ -307,20 +589,48 @@ function download(url) {
   a.href = url; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
 }
 const fullPanParam = (box) => (me.role === "ADMIN" && $(box).checked ? "true" : "false");
+const emptyRow = (cols, text) => `<tr><td colspan="${cols}" class="empty">${text}</td></tr>`;
 
-// --- Reports ---
+// ---------- Login ----------
+$("#togglePw").addEventListener("click", () => {
+  const pw = $("#loginPw"), show = pw.type === "password";
+  pw.type = show ? "text" : "password";
+  const b = $("#togglePw");
+  b.dataset.tip = show ? "Hide password" : "Show password"; b.setAttribute("aria-label", b.dataset.tip);
+  b.innerHTML = ic(show ? "eye-off" : "eye");
+  pw.focus();
+});
+$("#loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("#loginErr"); err.classList.add("hidden");
+  const f = new FormData(e.target);
+  if (!String(f.get("email")).trim() || !f.get("password")) {
+    err.querySelector("span").textContent = "Enter your username and password."; err.classList.remove("hidden"); return;
+  }
+  const btn = $("#loginBtn"); btn.disabled = true; btn.innerHTML = `${ic("loader", "spin")}<span>Signing in…</span>`;
+  try {
+    ({ user: me } = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email: f.get("email"), password: f.get("password") }) }));
+    e.target.reset(); showShell();
+  } catch (ex) {
+    err.querySelector("span").textContent = ex.message; err.classList.remove("hidden");
+    $("#loginPw").select();
+  } finally { btn.disabled = false; btn.innerHTML = `<span>Sign in</span>${ic("arrow-right")}`; }
+});
+$("#logout").addEventListener("click", async () => { await api("/api/auth/logout", { method: "POST" }); me = null; showLogin(); });
+
+// ---------- Reports ----------
 const pct = (r) => (r == null ? "—" : `${(r * 100).toFixed(1)}%`);
 const rupees = (n) => (n ? `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—");
 const gainText = (n) => (n == null ? "—" : `${n < 0 ? "−" : n > 0 ? "+" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`);
-const hint = (t) => `<span class="muted" style="font-size:12px">${t}</span>`;
+const hint = (t) => `<span class="muted small" style="font-weight:500">${t}</span>`;
 /** Allotted value: blank when nothing allotted; a hint when allotted but no price is known. */
 const valueCell = (r) => `<td class="num">${!r.allotted ? "" : r.allottedValue ? rupees(r.allottedValue) : hint("set issue price")}</td>`;
 /** Listing gain: blank when nothing allotted; hint when no listing price; * when only some are priced. */
 function gainCell(r) {
   if (!r.allotted) return `<td class="num"></td>`;
   if (r.gainUnknown === r.allotted) return `<td class="num">${hint("set listing price")}</td>`;
-  const partial = r.gainUnknown ? `<span title="${r.gainUnknown} allotment(s) not counted: no listing price yet">*</span>` : "";
-  return `<td class="num${r.listingGain < 0 ? " err" : ""}">${gainText(r.listingGain)}${partial}</td>`;
+  const partial = r.gainUnknown ? `<span data-tip="${r.gainUnknown} allotment(s) not counted: no listing price yet">*</span>` : "";
+  return `<td class="num${r.listingGain < 0 ? " err" : ""}" style="${r.listingGain > 0 ? "color:var(--ok)" : ""}">${gainText(r.listingGain)}${partial}</td>`;
 }
 async function fillReportFilters() {
   if ($("#repClient").dataset.loaded) return;
@@ -329,7 +639,7 @@ async function fillReportFilters() {
   // Without real groups, "group by client" would just repeat the per-PAN list.
   const grouped = fillGroupSelect("#repClient", clients);
   if (!grouped) $("#repGroup").value = "pan";
-  $("#repGroup").classList.toggle("hidden", !grouped);
+  $("#repGroup").closest("label").classList.toggle("hidden", !grouped);
   $("#repRegistrar").innerHTML = `<option value="">All registrars</option>` + registrars.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
   $("#repIpo").innerHTML = `<option value="">All IPOs</option>` + ipos.map((i) => `<option value="${i.id}">${esc(i.name)}</option>`).join("");
   $("#repClient").dataset.loaded = "1";
@@ -345,26 +655,26 @@ async function loadReport() {
   await fillReportFilters();
   const p = reportParams(); p.set("groupBy", $("#repGroup").value);
   const { totals: t, rows, groupBy } = await api(`/api/reports/history?${p}`);
-  $("#repStats").innerHTML = [["IPOs", t.ipos], ["PANs", t.pans], ["Applications", t.applications], ["Allotted", t.allotted],
-    ["Allotment ratio", pct(t.ratio)], ["Shares allotted", fmtNum(t.sharesAllotted)],
-    ["Allotted value", !t.allotted ? "—" : t.allottedValue ? rupees(t.allottedValue) : hint("set issue price")],
-    ["Listing gain" + (t.gainUnknown && t.gainUnknown < t.allotted ? "*" : ""),
+  $("#repStats").innerHTML = [["", "IPOs", t.ipos], ["", "PANs", t.pans], ["", "Applications", t.applications], ["ALLOTTED", "Allotted", t.allotted],
+    ["", "Allotment ratio", pct(t.ratio)], ["", "Shares allotted", fmtNum(t.sharesAllotted)],
+    ["", "Allotted value", !t.allotted ? "—" : t.allottedValue ? rupees(t.allottedValue) : hint("set issue price")],
+    ["", "Listing gain" + (t.gainUnknown && t.gainUnknown < t.allotted ? "*" : ""),
       !t.allotted ? "—" : t.gainUnknown === t.allotted ? hint("set listing price") : gainText(t.listingGain)]]
-    .map(([k, v]) => `<div><b>${v}</b><span class="muted">${k}</span></div>`).join("")
+    .map(([k, label, v]) => `<div class="${k ? `k-${k}` : ""}"><b>${v}</b><span class="muted">${label}</span></div>`).join("")
     + (t.allotted && t.gainUnknown
-      ? `<div class="muted" style="align-self:end">${t.gainUnknown === t.allotted ? "" : `* ${t.gainUnknown} allotment(s) not counted. `}Enter the issue and listing price on each IPO's page.</div>`
+      ? `<div class="note">${t.gainUnknown === t.allotted ? "" : `* ${t.gainUnknown} allotment(s) not counted. `}Enter the issue and listing price on each IPO's page to see value and listing gain.</div>`
       : "");
   const byPan = groupBy === "pan";
   $("#repHead").innerHTML = `<tr>${byPan ? '<th>Name</th><th>PAN</th><th class="grp">Client</th>' : "<th>Client</th>"}
     <th class="num">IPOs applied</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Ratio</th>
     <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Listing gain</th><th class="num">Errors</th></tr>`;
   $("#repRows").innerHTML = rows.map((r) => `<tr${r.deleted ? ' class="muted"' : ""}>${byPan
-    ? `<td>${esc(r.label)}${r.deleted ? ' <span class="tag" title="PAN deleted; results kept">deleted</span>' : ""}</td><td class="mono">${esc(r.panMasked)}</td>${grpCell(r.clientName, r.label)}`
+    ? `<td>${esc(r.label)}${r.deleted ? ' <span class="tag plain" data-tip="PAN deleted; results kept">deleted</span>' : ""}</td><td class="mono">${esc(r.panMasked)}</td>${grpCell(r.clientName, r.label)}`
     : `<td>${esc(r.label)}</td>`}
     <td class="num">${r.applied}</td><td class="num"><b>${r.allotted}</b></td><td class="num">${r.notAllotted}</td><td class="num">${pct(r.ratio)}</td>
     <td class="num">${fmtNum(r.sharesApplied)}</td><td class="num">${fmtNum(r.sharesAllotted)}</td>${valueCell(r)}
     ${gainCell(r)}<td class="num">${r.errors || ""}</td></tr>`).join("")
-    || `<tr><td colspan="${byPan ? 12 : 10}" class="muted">No checked results match these filters yet.</td></tr>`;
+    || emptyRow(byPan ? 12 : 10, "No checked results match these filters yet.");
   if (byPan) setGroupCol("#repRows", rows, (r) => r.clientName, (r) => r.label);
   else $("#repRows").closest("table").classList.remove("no-grp");
 }
@@ -374,7 +684,7 @@ $("#repExport").addEventListener("click", () => {
   download(`/api/reports/history/export?${p}`);
 });
 
-// --- IPOs ---
+// ---------- IPOs ----------
 const STATUS_LABEL = { ALLOTTED: "Allotted", NOT_ALLOTTED: "Not allotted", NOT_APPLIED: "Not applied", ERROR: "Error", PENDING: "Unchecked" };
 const fmtDate = (d) => (d ? new Date(d).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "");
 const fmtNum = (n) => (n == null ? "" : Number(n).toLocaleString("en-IN"));
@@ -383,7 +693,10 @@ const jobActive = (j) => j && (j.state === "QUEUED" || j.state === "RUNNING");
 const jobText = (j) => !j ? "Never" : ({ auto: "Auto: ", import: "After import: " }[j.trigger] ?? "") + (jobActive(j) ? `${j.state === "QUEUED" ? "Queued" : "Running"} ${j.done}/${j.total}`
   : `${j.state === "DONE" ? "Done" : j.state.toLowerCase()} · ${fmtDate(j.finishedAt || j.createdAt)}`);
 const dateOnly = (d) => (d ? String(d).slice(0, 10) : "");
-const fmtDay = (d) => (d ? new Date(`${dateOnly(d)}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "");
+// Accepts an ISO date/datetime string or a timestamp (the calendar passes local-midnight timestamps).
+const fmtDay = (d) => (d == null || d === "" ? ""
+  : (typeof d === "number" ? new Date(d) : new Date(`${dateOnly(d)}T00:00:00`)).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }));
+const onOpen = (e) => { const a = e.target.closest("[data-open]"); if (a) openIpo(a.dataset.open); };
 
 async function loadToday() {
   let s;
@@ -395,14 +708,15 @@ async function loadToday() {
       + (s.lastTickAt ? ` · last run ${fmtDate(s.lastTickAt)}` : "");
   $("#todayRows").innerHTML = s.ipos.map((i) => {
     const d = i.lastAction?.action === "wait" || !i.lastAction ? i.next : i.lastAction;
-    return `<tr><td><a class="link" data-open="${i.ipoId}">${esc(i.name)}</a></td><td class="muted">${fmtDay(i.allotmentDate)}</td>
+    return `<tr><td><a class="link" data-open="${i.ipoId}">${esc(i.name)}</a></td><td class="muted" style="width:140px">${fmtDay(i.allotmentDate)}</td>
       <td>${esc(d.reason.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/, (iso) => fmtDate(iso)))}</td></tr>`;
   }).join("");
 }
-$("#todayRows").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
-$("#schedRun").addEventListener("click", async (e) => {
-  e.target.disabled = true;
-  try { await api("/api/scheduler/run", { method: "POST" }); } finally { e.target.disabled = false; loadIpos(); }
+$("#todayRows").addEventListener("click", onOpen);
+$("#schedRun").addEventListener("click", async () => {
+  const b = $("#schedRun"); b.disabled = true;
+  try { await api("/api/scheduler/run", { method: "POST" }); toast("Scheduler run finished"); } catch (err) { toast(err.message, "err"); }
+  finally { b.disabled = false; loadIpos(); }
 });
 
 async function loadIpos() {
@@ -412,11 +726,12 @@ async function loadIpos() {
   const regName = (id) => registrars.find((r) => r.id === id)?.name ?? id;
   $("#ipoRows").innerHTML = ipos.map((i) => `<tr>
     <td><a class="link" data-open="${i.id}">${esc(i.name)}</a></td><td class="muted">${esc(regName(i.registrar))}</td>
-    <td class="muted">${i.allotmentDate ? fmtDay(i.allotmentDate) : '<span class="tag PENDING">Set date</span>'}${i.autoCheck ? "" : ' <span class="muted">(manual)</span>'}</td>
-    <td class="num"><b>${i.counts.ALLOTTED}</b></td><td class="num">${i.counts.NOT_ALLOTTED}</td><td class="num">${i.counts.NOT_APPLIED}</td>
-    <td class="num">${i.counts.ERROR || ""}</td><td class="num">${i.counts.PENDING || ""}</td>
-    <td class="muted">${jobText(i.job)}</td><td><button class="btn" data-open="${i.id}">Open</button></td></tr>`).join("")
-    || `<tr><td colspan="10" class="muted">No IPOs tracked yet. Click "Show live IPOs" above and track one.</td></tr>`;
+    <td>${i.allotmentDate ? fmtDay(i.allotmentDate) : '<span class="tag PENDING">Set date</span>'}${i.autoCheck ? "" : ' <span class="muted small">(manual)</span>'}</td>
+    <td class="num"><b style="color:var(--ok)">${i.counts.ALLOTTED}</b></td><td class="num">${i.counts.NOT_ALLOTTED}</td><td class="num">${i.counts.NOT_APPLIED}</td>
+    <td class="num">${i.counts.ERROR ? `<span class="err">${i.counts.ERROR}</span>` : ""}</td><td class="num">${i.counts.PENDING || ""}</td>
+    <td class="muted small">${jobActive(i.job) ? ic("loader", "spin") + " " : ""}${jobText(i.job)}</td>
+    <td><div class="actions">${iconBtn("arrow-right", "Open IPO", `data-open="${i.id}"`)}</div></td></tr>`).join("")
+    || emptyRow(10, `No IPOs tracked yet. Click <b>Show live IPOs at all registrars</b> above and track one.`);
   loadToday();
   if (ipos.some((i) => jobActive(i.job))) pollTimer = setTimeout(loadIpos, 4000);
 }
@@ -426,7 +741,7 @@ function openIpo(id) {
   delete $("#ipoSave").dataset.dirty; $("#ipoSaveMsg").textContent = "";
   show("ipo");
 }
-$("#ipoRows").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
+$("#ipoRows").addEventListener("click", onOpen);
 
 /** Allotment and listing dates of tracked IPOs, from 3 days ago to 30 days ahead. */
 function renderCalendar(ipos) {
@@ -439,56 +754,61 @@ function renderCalendar(ipos) {
   $("#calRows").innerHTML = events.map((e) => {
     const days = Math.round((e.t - today.getTime()) / 864e5);
     const when = days === 0 ? "<b>Today</b>" : days === 1 ? "Tomorrow" : days === -1 ? "Yesterday" : days < 0 ? `${-days} days ago` : `in ${days} days`;
-    return `<tr${days < 0 ? ' class="muted"' : ""}><td style="width:130px">${fmtDay(e.t)}</td><td style="width:110px">${when}</td>
-      <td><span class="tag ${e.kind === "Allotment" ? "PENDING" : "NOT_APPLIED"}">${e.kind}</span></td>
+    return `<tr${days < 0 ? ' class="muted"' : ""}><td style="width:140px">${fmtDay(e.t)}</td><td style="width:120px">${when}</td>
+      <td style="width:120px"><span class="tag ${e.kind === "Allotment" ? "PENDING" : "NOT_APPLIED"}">${e.kind}</span></td>
       <td><a class="link" data-open="${e.ipo.id}">${esc(e.ipo.name)}</a></td></tr>`;
   }).join("");
 }
-$("#calRows").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
+$("#calRows").addEventListener("click", onOpen);
 
 let liveData = null;
 async function loadLive(refresh) {
-  $("#liveMsg").textContent = "Asking registrars…"; $("#liveMsg").className = "muted";
+  const b = $("#loadLive"); b.disabled = true;
+  $("#liveMsg").innerHTML = `${ic("loader", "spin")} Asking registrars…`; $("#liveMsg").className = "msg";
   try {
     liveData = await api(`/api/registrars/live${refresh ? "?refresh=true" : ""}`);
     renderLive();
     ["#liveTable", "#refreshLive", "#untrackedWrap"].forEach((s) => $(s).classList.remove("hidden"));
-  } catch (err) { $("#liveMsg").textContent = err.message; $("#liveMsg").className = "err"; }
+  } catch (err) { $("#liveMsg").textContent = err.message; $("#liveMsg").className = "msg err"; }
+  finally { b.disabled = false; }
 }
 function renderLive() {
   const { registrars: regs, ipos } = liveData;
   const failed = regs.filter((r) => r.error);
-  $("#liveMsg").innerHTML = regs.map((r) => `${esc(r.name)}: ${r.error ? '<span class="err">no response</span>' : r.count}`).join(" · ");
+  $("#liveMsg").innerHTML = regs.map((r) => `<span style="margin-right:12px">${esc(r.name)}: ${r.error ? '<span class="err">no response</span>' : `<b>${r.count}</b>`}</span>`).join("");
   const rows = ipos.filter((i) => !$("#untrackedOnly").checked || !i.trackedIpoId);
-  $("#liveRows").innerHTML = rows.map((i) => `<tr><td class="muted">${esc(i.registrarName)}</td><td>${esc(i.name)}${i.isSme ? ' <span class="tag">SME</span>' : ""}</td>
-    <td>${i.trackedIpoId ? (i.allotmentDate ? fmtDay(i.allotmentDate) : "—") : '<input type="date" class="liveDate">'}</td>
-    <td>${i.trackedIpoId ? `<a class="link" data-open-live="${i.trackedIpoId}">Tracked ✓</a>`
-      : `<button class="btn" data-track='${esc(JSON.stringify({ registrar: i.registrar, registrarIpoId: i.registrarIpoId, name: i.name, isSme: i.isSme }))}'>Track</button>`}</td></tr>`).join("")
-    || `<tr><td colspan="4" class="muted">${ipos.length ? "All live IPOs are already tracked." : "No IPOs listed right now."}${failed.length ? " Some registrars didn't respond — try Refresh." : ""}</td></tr>`;
+  $("#liveRows").innerHTML = rows.map((i) => `<tr><td class="muted">${esc(i.registrarName)}</td><td>${esc(i.name)}${i.isSme ? ' <span class="tag plain">SME</span>' : ""}</td>
+    <td>${i.trackedIpoId ? (i.allotmentDate ? fmtDay(i.allotmentDate) : "—") : '<input type="date" class="liveDate" aria-label="Allotment date">'}</td>
+    <td class="num">${i.trackedIpoId ? `<a class="link" data-open-live="${i.trackedIpoId}">${ic("check-circle")} Tracked</a>`
+      : `<button class="btn sm primary" data-tip="Start tracking this IPO" data-track='${esc(JSON.stringify({ registrar: i.registrar, registrarIpoId: i.registrarIpoId, name: i.name, isSme: i.isSme }))}'>${ic("plus")}Track</button>`}</td></tr>`).join("")
+    || emptyRow(4, `${ipos.length ? "All live IPOs are already tracked." : "No IPOs listed right now."}${failed.length ? " Some registrars didn't respond — try Refresh." : ""}`);
 }
 $("#loadLive").addEventListener("click", () => loadLive(false));
 $("#refreshLive").addEventListener("click", () => loadLive(true));
 $("#untrackedOnly").addEventListener("change", () => liveData && renderLive());
 $("#liveRows").addEventListener("click", async (e) => {
-  if (e.target.dataset.openLive) return openIpo(e.target.dataset.openLive);
-  if (!e.target.dataset.track) return;
-  e.target.disabled = true;
-  const body = JSON.parse(e.target.dataset.track);
-  const date = e.target.closest("tr").querySelector(".liveDate")?.value;
+  const open = e.target.closest("[data-open-live]");
+  if (open) return openIpo(open.dataset.openLive);
+  const b = e.target.closest("[data-track]"); if (!b) return;
+  b.disabled = true;
+  const body = JSON.parse(b.dataset.track);
+  const date = b.closest("tr").querySelector(".liveDate")?.value;
   if (date) body.allotmentDate = date;
   try {
     const { ipo } = await api("/api/ipos", { method: "POST", body: JSON.stringify(body) });
     const live = liveData.ipos.find((i) => i.registrar === body.registrar && i.registrarIpoId === body.registrarIpoId);
     if (live) { live.trackedIpoId = ipo.id; live.allotmentDate = ipo.allotmentDate; }
-    renderLive();
-    loadIpos();
-  } catch (err) { e.target.disabled = false; $("#liveMsg").textContent = err.message; $("#liveMsg").className = "err"; }
+    renderLive(); loadIpos();
+    toast(`Tracking ${ipo.name}`);
+  } catch (err) { b.disabled = false; toast(err.message, "err"); }
 });
 
 async function loadIpo() {
   const { ipo } = await api(`/api/ipos/${currentIpo}`);
   $("#ipoTitle").textContent = ipo.name;
-  $("#ipoSub").textContent = `${registrars.find((r) => r.id === ipo.registrar)?.name ?? ipo.registrar} · ID ${ipo.registrarIpoId}`;
+  const regName = registrars.find((r) => r.id === ipo.registrar)?.name ?? ipo.registrar;
+  $("#ipoSub").textContent = `${regName} · ID ${ipo.registrarIpoId}${ipo.allotmentDate ? ` · Allotment ${fmtDay(ipo.allotmentDate)}` : ""}`;
+  $("#pageSub").textContent = regName;
   // Don't overwrite fields the user is editing while a job refresh polls.
   if (!$("#ipoSave").dataset.dirty) {
     $("#ipoAllot").value = dateOnly(ipo.allotmentDate);
@@ -497,25 +817,25 @@ async function loadIpo() {
     $("#ipoIssue").value = ipo.issuePrice ?? "";
     $("#ipoListPrice").value = ipo.listingPrice ?? "";
   }
-  $("#ipoArchive").textContent = ipo.archived ? "Unarchive" : "Archive";
+  $("#ipoArchive").innerHTML = `${ic("archive")}${ipo.archived ? "Unarchive" : "Archive"}`;
   $("#ipoArchive").dataset.archived = ipo.archived;
   const c = ipo.counts;
   $("#ipoStats").innerHTML = [["ALLOTTED", c.ALLOTTED], ["NOT_ALLOTTED", c.NOT_ALLOTTED], ["NOT_APPLIED", c.NOT_APPLIED], ["ERROR", c.ERROR], ["PENDING", c.PENDING]]
-    .map(([k, v]) => `<div><b>${v}</b><a class="link" data-filter="${k}">${STATUS_LABEL[k]}</a></div>`).join("")
+    .map(([k, v]) => `<div class="k-${k}"><b>${v}</b><a class="link" data-filter="${k}" data-tip="Show only ${STATUS_LABEL[k].toLowerCase()}">${STATUS_LABEL[k]}</a></div>`).join("")
     + `<div><b>${fmtNum(c.allottedShares)}</b><span class="muted">Shares allotted</span></div>`
-    + (ipo.listingGain == null ? "" : `<div><b class="${ipo.listingGain < 0 ? "err" : ""}">${gainText(ipo.listingGain)}</b><span class="muted">Listing gain</span></div>`);
+    + (ipo.listingGain == null ? "" : `<div><b class="${ipo.listingGain < 0 ? "err" : ""}" style="${ipo.listingGain > 0 ? "color:var(--ok)" : ""}">${gainText(ipo.listingGain)}</b><span class="muted">Listing gain</span></div>`);
 
   const j = ipo.job, active = jobActive(j);
   document.querySelectorAll("[data-scope]").forEach((b) => (b.disabled = active));
   $("#jobBox").classList.toggle("hidden", !active);
   if (active) {
     $("#ipoMsg").textContent = "";
-    $("#jobText").textContent = `${jobText(j)}${j.failed ? ` · ${j.failed} errors` : ""}`;
+    $("#jobText").innerHTML = `${ic("loader", "spin")} <b>${esc(jobText(j))}</b>${j.failed ? ` <span class="err">· ${j.failed} errors</span>` : ""}`;
     $("#jobBar").style.width = `${Math.round((100 * j.done) / j.total)}%`;
     $("#cancelJob").dataset.job = j.id;
   } else if (j) {
     $("#ipoMsg").textContent = `Last check: ${jobText(j)} (${j.done}/${j.total}${j.failed ? `, ${j.failed} errors` : ""})${j.error ? ` — ${j.error}` : ""}`;
-    $("#ipoMsg").className = "muted";
+    $("#ipoMsg").className = "msg";
   }
 
   if (!$("#resClient").dataset.loaded) {
@@ -539,16 +859,18 @@ async function loadResults() {
   $("#resRows").innerHTML = rows.map(({ result: r, ...p }) => {
     const st = r ? r.status : "PENDING";
     return `<tr><td class="mono">${esc(p.panMasked)}</td><td>${esc(p.holderName)}</td>${grpCell(p.client.name, p.holderName)}
-      <td><span class="tag ${st}" title="${esc(r?.message)}">${STATUS_LABEL[st]}</span>${r?.message ? `<div class="muted" style="font-size:12px">${esc(r.message)}</div>` : ""}</td>
-      <td class="num">${fmtNum(r?.appliedQty)}</td><td class="num">${st === "ALLOTTED" ? `<b>${fmtNum(r.allottedQty)}</b>` : fmtNum(r?.allottedQty)}</td>
+      <td><span class="tag ${st}"${r?.message ? ` data-tip="${esc(r.message)}"` : ""}>${STATUS_LABEL[st]}</span>${r?.message ? `<div class="muted small">${esc(r.message)}</div>` : ""}</td>
+      <td class="num">${fmtNum(r?.appliedQty)}</td><td class="num">${st === "ALLOTTED" ? `<b style="color:var(--ok)">${fmtNum(r.allottedQty)}</b>` : fmtNum(r?.allottedQty)}</td>
       <td>${esc(r?.category)}</td><td class="num">${fmtNum(r?.price)}</td><td class="num">${fmtNum(r?.amountAdjusted)}</td>
-      <td class="muted">${fmtDate(r?.checkedAt)}</td></tr>`;
-  }).join("") || `<tr><td colspan="10" class="muted">No PANs match.</td></tr>`;
+      <td class="muted small">${fmtDate(r?.checkedAt)}</td></tr>`;
+  }).join("") || emptyRow(10, "No PANs match.");
   setGroupCol("#resRows", rows, (r) => r.client.name, (r) => r.holderName);
 }
 
 $("#backToIpos").addEventListener("click", () => show("ipos"));
-["#ipoAllot", "#ipoList", "#ipoAuto", "#ipoIssue", "#ipoListPrice"].forEach((s) => $(s).addEventListener("change", () => { $("#ipoSave").dataset.dirty = "1"; $("#ipoSaveMsg").textContent = "Unsaved changes"; }));
+["#ipoAllot", "#ipoList", "#ipoAuto", "#ipoIssue", "#ipoListPrice"].forEach((s) => $(s).addEventListener("change", () => {
+  $("#ipoSave").dataset.dirty = "1"; $("#ipoSaveMsg").textContent = "Unsaved changes"; $("#ipoSaveMsg").className = "msg";
+}));
 $("#ipoSave").addEventListener("click", async () => {
   try {
     await api(`/api/ipos/${currentIpo}`, { method: "PATCH", body: JSON.stringify({
@@ -557,23 +879,32 @@ $("#ipoSave").addEventListener("click", async () => {
       listingPrice: $("#ipoListPrice").value ? Number($("#ipoListPrice").value) : null,
     }) });
     delete $("#ipoSave").dataset.dirty;
-    $("#ipoSaveMsg").textContent = "Saved"; $("#ipoSaveMsg").className = "muted";
-  } catch (err) { $("#ipoSaveMsg").textContent = err.message; $("#ipoSaveMsg").className = "err"; }
+    $("#ipoSaveMsg").textContent = "";
+    toast("IPO details saved");
+    loadIpo();
+  } catch (err) { $("#ipoSaveMsg").textContent = err.message; $("#ipoSaveMsg").className = "msg err"; }
 });
-$("#ipoArchive").addEventListener("click", async (e) => {
-  const archived = e.target.dataset.archived !== "true";
+$("#ipoArchive").addEventListener("click", async () => {
+  const archived = $("#ipoArchive").dataset.archived !== "true";
   if (archived && !confirm("Archive this IPO? It disappears from the IPO list and auto-checks stop. Results stay in reports.")) return;
   await api(`/api/ipos/${currentIpo}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+  toast(archived ? "IPO archived" : "IPO restored");
   show(archived ? "ipos" : "ipo");
 });
 document.querySelectorAll("[data-scope]").forEach((b) => b.addEventListener("click", async () => {
   if (b.dataset.scope === "all" && !confirm("Re-check every PAN for this IPO?")) return;
   $("#ipoMsg").textContent = "";
-  try { await api(`/api/ipos/${currentIpo}/check`, { method: "POST", body: JSON.stringify({ scope: b.dataset.scope }) }); clearTimeout(pollTimer); loadIpo(); }
-  catch (err) { $("#ipoMsg").textContent = err.message; $("#ipoMsg").className = "err"; }
+  try {
+    const { job } = await api(`/api/ipos/${currentIpo}/check`, { method: "POST", body: JSON.stringify({ scope: b.dataset.scope }) });
+    toast(`Check started for ${job.total} PAN${job.total === 1 ? "" : "s"}`);
+    clearTimeout(pollTimer); loadIpo();
+  } catch (err) { $("#ipoMsg").textContent = err.message; $("#ipoMsg").className = "msg err"; }
 }));
-$("#cancelJob").addEventListener("click", async (e) => { await api(`/api/jobs/${e.target.dataset.job}/cancel`, { method: "POST" }); clearTimeout(pollTimer); loadIpo(); });
-$("#ipoStats").addEventListener("click", (e) => { if (e.target.dataset.filter) { $("#resStatus").value = e.target.dataset.filter; resPage = 1; loadResults(); } });
+$("#cancelJob").addEventListener("click", async () => {
+  await api(`/api/jobs/${$("#cancelJob").dataset.job}/cancel`, { method: "POST" });
+  toast("Check cancelled"); clearTimeout(pollTimer); loadIpo();
+});
+$("#ipoStats").addEventListener("click", (e) => { const a = e.target.closest("[data-filter]"); if (a) { $("#resStatus").value = a.dataset.filter; resPage = 1; loadResults(); } });
 $("#resStatus").addEventListener("change", () => { resPage = 1; loadResults(); });
 $("#resClient").addEventListener("change", () => { resPage = 1; loadResults(); });
 let resTimer;
@@ -588,19 +919,7 @@ $("#resExport").addEventListener("click", () => {
 $("#resPrev").addEventListener("click", () => { resPage--; loadResults(); });
 $("#resNext").addEventListener("click", () => { resPage++; loadResults(); });
 
-$("#nav").addEventListener("click", (e) => { if (e.target.dataset.view) show(e.target.dataset.view); });
-
-$("#loginForm").addEventListener("submit", async (e) => {
-  e.preventDefault(); $("#loginErr").textContent = "";
-  const f = new FormData(e.target);
-  try {
-    ({ user: me } = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email: f.get("email"), password: f.get("password") }) }));
-    e.target.reset(); showShell();
-  } catch (err) { $("#loginErr").textContent = err.message; }
-});
-$("#logout").addEventListener("click", async () => { await api("/api/auth/logout", { method: "POST" }); me = null; showLogin(); });
-
-// --- PANs ---
+// ---------- PANs ----------
 async function loadClients() {
   const { clients } = await api("/api/clients");
   fillGroupSelect("#clientFilter", clients, true);
@@ -620,7 +939,7 @@ async function loadPans() {
   panTotal = total;
   panById = new Map(pans.map((x) => [x.id, x]));
   $("#panRows").innerHTML = pans.map(panRow).join("")
-    || `<tr><td colspan="7" class="muted">No PANs match${admin ? ". Use Import to add PANs." : "."}</td></tr>`;
+    || emptyRow(7, `No PANs match${admin ? ". Use <b>Import PANs</b> to add them." : "."}`);
   document.querySelectorAll("#view-pans [data-admin-inline]").forEach((el) => el.classList.toggle("hidden", !admin || (el.id === "delFileCard" && !showDelFile)));
   setGroupCol("#panRows", pans, (x) => x.client.name, (x) => x.holderName);
   updateSelection();
@@ -633,20 +952,22 @@ const panFilter = () => ({
 function panRow(x) {
   const admin = me.role === "ADMIN";
   return `<tr data-row="${x.id}"${x.active ? "" : ' class="muted"'}>
-    ${admin ? `<td><input type="checkbox" class="selPan" value="${x.id}"${selected.has(x.id) || selectAllMatching ? " checked" : ""}></td>` : ""}
-    <td class="mono" data-pan="${x.id}">${esc(x.panMasked)}</td><td>${esc(x.holderName)}</td>${grpCell(x.client.name, x.holderName)}
+    ${admin ? `<td><input type="checkbox" class="selPan" value="${x.id}" aria-label="Select"${selected.has(x.id) || selectAllMatching ? " checked" : ""}></td>` : ""}
+    <td class="mono" data-pan="${x.id}">${esc(x.panMasked)}</td><td>${esc(x.holderName)}${x.active ? "" : ' <span class="tag plain">inactive</span>'}</td>${grpCell(x.client.name, x.holderName)}
     <td>${esc(x.mobile)}</td><td class="mono">${esc(x.dpClientId)}</td>
-    <td style="white-space:nowrap">${admin ? `<button class="btn" data-edit="${x.id}">Edit</button>
-      <button class="btn" data-reveal="${x.id}">Reveal</button>
-      <button class="btn" data-toggle="${x.id}" data-active="${x.active}">${x.active ? "Deactivate" : "Activate"}</button>
-      <button class="btn danger" data-del="${x.id}">Delete</button>` : ""}</td></tr>`;
+    ${admin ? `<td><div class="actions">
+      ${iconBtn("pencil", "Edit name, mobile, DP ID", `data-edit="${x.id}"`)}
+      ${iconBtn("eye", "Reveal full PAN for 10 seconds", `data-reveal="${x.id}"`)}
+      ${x.active ? iconBtn("pause", "Deactivate (skip in checks)", `data-toggle="${x.id}" data-active="true"`)
+                 : iconBtn("resume", "Activate", `data-toggle="${x.id}" data-active="false"`, "ok")}
+      ${iconBtn("trash", "Delete permanently", `data-del="${x.id}"`, "danger")}</div></td>` : ""}</tr>`;
 }
 function editRow(x) {
   return `<tr data-row="${x.id}"><td></td><td class="mono">${esc(x.panMasked)}</td>
-    <td><input class="edit" data-f="holderName" value="${esc(x.holderName)}"></td>${grpCell(x.client.name, x.holderName)}
-    <td><input class="edit" data-f="mobile" value="${esc(x.mobile)}"></td><td><input class="edit mono" data-f="dpClientId" value="${esc(x.dpClientId)}"></td>
-    <td style="white-space:nowrap"><button class="btn primary" data-save="${x.id}">Save</button> <button class="btn" data-cancel="${x.id}">Cancel</button>
-      <span class="err" data-editmsg></span></td></tr>`;
+    <td><input class="edit" data-f="holderName" value="${esc(x.holderName)}" aria-label="Name"></td>${grpCell(x.client.name, x.holderName)}
+    <td><input class="edit" data-f="mobile" value="${esc(x.mobile)}" aria-label="Mobile"></td><td><input class="edit mono" data-f="dpClientId" value="${esc(x.dpClientId)}" aria-label="DP ID"></td>
+    <td><div class="actions">${iconBtn("check", "Save changes", `data-save="${x.id}"`, "ok")}${iconBtn("x", "Cancel", `data-cancel="${x.id}"`)}</div>
+      <div class="err small" data-editmsg></div></td></tr>`;
 }
 
 // Selection: explicit ids, or "everything matching the filter" (can span pages).
@@ -674,11 +995,13 @@ $("#selAll").addEventListener("click", () => {
 });
 $("#bulkDelete").addEventListener("click", async () => {
   const n = selectAllMatching ? panTotal : selected.size;
-  if (!confirm(`Permanently delete ${n} PAN${n === 1 ? "" : "s"}?\n\nThe full PAN numbers are erased and can't be recovered. Past IPO results stay in Reports (masked PAN, holder, client).`)) return;
+  if (!confirm(`Permanently delete ${n} PAN${n === 1 ? "" : "s"}?\n\nThe full PAN numbers are erased and can't be recovered. Past IPO results stay in Reports (masked PAN and name).`)) return;
   const body = selectAllMatching ? { filter: panFilter() } : { ids: [...selected] };
-  const { deleted } = await api("/api/pans/bulk-delete", { method: "POST", body: JSON.stringify(body) });
-  clearSelection(); page = 1; await loadPans();
-  $("#selInfo").textContent = `${deleted} deleted`;
+  try {
+    const { deleted } = await api("/api/pans/bulk-delete", { method: "POST", body: JSON.stringify(body) });
+    clearSelection(); page = 1; await loadPans();
+    toast(`${deleted} PAN${deleted === 1 ? "" : "s"} deleted`);
+  } catch (err) { toast(err.message, "err"); }
 });
 
 let qTimer;
@@ -697,47 +1020,55 @@ $("#panRows").addEventListener("change", (e) => {
   updateSelection();
 });
 $("#panRows").addEventListener("click", async (e) => {
-  const d = e.target.dataset;
-  if (d.reveal) {
-    const { pan } = await api(`/api/pans/${d.reveal}/reveal`);
-    const cell = document.querySelector(`[data-pan="${d.reveal}"]`); const masked = cell.textContent;
-    cell.textContent = pan; setTimeout(() => (cell.textContent = masked), 10000);
-  }
-  if (d.toggle) {
-    await api(`/api/pans/${d.toggle}`, { method: "PATCH", body: JSON.stringify({ active: d.active !== "true" }) });
-    loadPans();
-  }
-  if (d.edit) e.target.closest("tr").outerHTML = editRow(panById.get(+d.edit));
-  if (d.cancel) e.target.closest("tr").outerHTML = panRow(panById.get(+d.cancel));
-  if (d.save) {
-    const tr = e.target.closest("tr");
-    const body = Object.fromEntries([...tr.querySelectorAll("input.edit")].map((i) => [i.dataset.f, i.value.trim()]));
-    try {
-      const { pan } = await api(`/api/pans/${d.save}`, { method: "PATCH", body: JSON.stringify(body) });
-      panById.set(pan.id, pan);
-      tr.outerHTML = panRow(pan);
-    } catch (err) { tr.querySelector("[data-editmsg]").textContent = err.data?.issues?.join("; ") || err.message; }
-  }
-  if (d.del) {
-    const x = panById.get(+d.del);
-    if (!confirm(`Permanently delete ${x.panMasked} (${x.holderName})?\n\nThe full PAN is erased. Past IPO results stay in Reports.`)) return;
-    await api(`/api/pans/${d.del}`, { method: "DELETE" });
-    selected.delete(+d.del); loadPans();
-  }
+  const b = e.target.closest("button"); if (!b) return;
+  const d = b.dataset, tr = b.closest("tr");
+  try {
+    if (d.reveal) {
+      const { pan } = await api(`/api/pans/${d.reveal}/reveal`);
+      const cell = document.querySelector(`[data-pan="${d.reveal}"]`); const masked = cell.textContent;
+      cell.textContent = pan; cell.style.color = "var(--accent)";
+      setTimeout(() => { cell.textContent = masked; cell.style.color = ""; }, 10000);
+    }
+    if (d.toggle) {
+      const activate = d.active !== "true";
+      await api(`/api/pans/${d.toggle}`, { method: "PATCH", body: JSON.stringify({ active: activate }) });
+      toast(activate ? "PAN activated" : "PAN deactivated"); loadPans();
+    }
+    if (d.edit) { hideTip(); tr.outerHTML = editRow(panById.get(+d.edit)); $(`tr[data-row="${d.edit}"] input.edit`)?.focus(); }
+    if (d.cancel) { hideTip(); tr.outerHTML = panRow(panById.get(+d.cancel)); }
+    if (d.save) {
+      const body = Object.fromEntries([...tr.querySelectorAll("input.edit")].map((i) => [i.dataset.f, i.value.trim()]));
+      try {
+        const { pan } = await api(`/api/pans/${d.save}`, { method: "PATCH", body: JSON.stringify(body) });
+        panById.set(pan.id, pan); hideTip(); tr.outerHTML = panRow(pan); toast("PAN updated");
+      } catch (err) { tr.querySelector("[data-editmsg]").textContent = err.data?.issues?.join("; ") || err.message; }
+    }
+    if (d.del) {
+      const x = panById.get(+d.del);
+      if (!confirm(`Permanently delete ${x.panMasked} (${x.holderName})?\n\nThe full PAN is erased. Past IPO results stay in Reports.`)) return;
+      await api(`/api/pans/${d.del}`, { method: "DELETE" });
+      selected.delete(+d.del); toast("PAN deleted"); loadPans();
+    }
+  } catch (err) { if (!d.save) toast(err.message, "err"); }
+});
+$("#panRows").addEventListener("keydown", (e) => {
+  if (!e.target.classList.contains("edit")) return;
+  if (e.key === "Enter") e.target.closest("tr").querySelector("[data-save]")?.click();
+  if (e.key === "Escape") e.target.closest("tr").querySelector("[data-cancel]")?.click();
 });
 
 // Delete from Excel: preview matches, then confirm.
 $("#showDelFile").addEventListener("click", () => { showDelFile = !showDelFile; $("#delFileCard").classList.toggle("hidden", !showDelFile); });
 async function runDeleteFile(dryRun) {
   const file = $("#delFile").files[0];
-  if (!file) { $("#delMsg").textContent = "Choose a file first."; return; }
+  if (!file) { $("#delMsg").textContent = "Choose a file first."; $("#delMsg").className = "msg err"; return; }
   const fd = new FormData(); fd.append("file", file);
-  $("#delMsg").textContent = dryRun ? "Checking…" : "Deleting…"; $("#delMsg").className = "muted";
+  $("#delMsg").textContent = dryRun ? "Checking…" : "Deleting…"; $("#delMsg").className = "msg";
   try {
     const r = await api(`/api/pans/bulk-delete/file?dryRun=${dryRun}`, { method: "POST", body: fd });
     if (!dryRun) {
-      $("#delMsg").textContent = `${r.deleted} PAN${r.deleted === 1 ? "" : "s"} deleted.`;
-      $("#delResult").innerHTML = ""; $("#delCommit").disabled = true; clearSelection(); loadPans();
+      $("#delMsg").textContent = ""; $("#delResult").innerHTML = ""; $("#delCommit").disabled = true; clearSelection(); loadPans();
+      toast(`${r.deleted} PAN${r.deleted === 1 ? "" : "s"} deleted`);
       return;
     }
     $("#delMsg").textContent = `${r.matched.length} will be deleted · ${r.notFound.length} not found · ${r.errors.length} invalid`;
@@ -748,7 +1079,7 @@ async function runDeleteFile(dryRun) {
       ${r.notFound.map((m) => `<tr class="muted"><td>${m.rowNumber}</td><td class="mono">${esc(m.panMasked)}</td><td></td><td class="grp"></td><td>not in the system</td></tr>`).join("")}
       ${r.errors.map((m) => `<tr><td>${m.rowNumber}</td><td></td><td></td><td class="grp"></td><td class="err">${esc(m.message)}</td></tr>`).join("")}
       </tbody></table>`;
-  } catch (err) { $("#delMsg").textContent = err.message; $("#delMsg").className = "err"; }
+  } catch (err) { $("#delMsg").textContent = err.message; $("#delMsg").className = "msg err"; }
 }
 $("#delPreview").addEventListener("click", () => runDeleteFile(true));
 $("#delCommit").addEventListener("click", () => {
@@ -757,22 +1088,22 @@ $("#delCommit").addEventListener("click", () => {
 $("#delFile").addEventListener("change", () => { $("#delCommit").disabled = true; $("#delResult").innerHTML = ""; $("#delMsg").textContent = ""; });
 
 // Download formats for bulk uploads.
-document.addEventListener("click", (e) => { if (e.target.dataset?.template) download(`/api/templates/${e.target.dataset.template}`); });
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-template]"); if (b) download(`/api/templates/${b.dataset.template}`); });
 
-// --- Import ---
+// ---------- Import ----------
 async function loadImportIpos() {
   const { ipos } = await api("/api/ipos");
   $("#importIpoList").innerHTML = ipos.map((i) => `<label><input type="checkbox" class="importIpo" value="${i.id}" checked>
-    ${esc(i.name)}${i.allotmentDate ? ` <span class="muted">(${fmtDay(i.allotmentDate)})</span>` : ""}</label>`).join("")
-    || `<span class="muted">No IPOs tracked yet — track IPOs on the IPOs page first, then new uploads are checked automatically.</span>`;
+    ${esc(i.name)}${i.allotmentDate ? ` <span class="muted small">${fmtDay(i.allotmentDate)}</span>` : ""}</label>`).join("")
+    || `<span class="muted">No IPOs tracked yet. Track IPOs on the IPOs page first, then new uploads are checked automatically.</span>`;
 }
 
 async function runImport(dryRun) {
   const file = $("#file").files[0];
-  if (!file) { $("#importMsg").textContent = "Choose a file first."; return; }
+  if (!file) { $("#importMsg").textContent = "Choose a file first."; $("#importMsg").className = "msg err"; return; }
   const fd = new FormData(); fd.append("file", file);
-  $("#importMsg").textContent = dryRun ? "Checking file…" : "Importing…";
-  $("#importMsg").className = "";
+  $("#importMsg").innerHTML = `${ic("loader", "spin")} ${dryRun ? "Checking file…" : "Importing…"}`;
+  $("#importMsg").className = "msg";
   try {
     const qs = new URLSearchParams({ dryRun, skipErrors: $("#skipErrors").checked });
     const ipoIds = [...document.querySelectorAll(".importIpo:checked")].map((c) => c.value);
@@ -780,64 +1111,74 @@ async function runImport(dryRun) {
     const { plan, checks } = await api(`/api/pans/import?${qs}`, { method: "POST", body: fd });
     renderPlan(plan);
     $("#importChecks").innerHTML = (checks || []).length
-      ? `<b>Checks started:</b><ul>${checks.map((c) => `<li><a class="link" data-open="${c.ipoId}">${esc(c.name)}</a> — ${
+      ? `<div class="callout" style="margin-top:10px"><svg class="ic"><use href="#i-play"/></svg><div><b>Checks started</b><ul style="margin:6px 0 0;padding-left:18px">${checks.map((c) => `<li><a class="link" data-open="${c.ipoId}">${esc(c.name)}</a>: ${
           c.jobId ? `${c.total} PAN${c.total === 1 ? "" : "s"} queued` : "nothing new to check"}</li>`).join("")}</ul>
-         <p class="muted">Checks run in the background. Open an IPO to watch progress.</p>`
+         <div class="muted small" style="margin-top:4px">Checks run in the background. Open an IPO to watch progress.</div></div></div>`
       : "";
     if (dryRun) {
-      $("#importMsg").textContent = "Preview ready — nothing saved yet.";
+      $("#importMsg").textContent = "Preview ready. Nothing is saved until you click Import.";
       $("#commit").disabled = plan.summary.create + plan.summary.update === 0;
     } else {
-      $("#importMsg").textContent = `Imported: ${plan.summary.create} added, ${plan.summary.update} updated.`;
+      $("#importMsg").textContent = "";
+      toast(`Imported: ${plan.summary.create} added, ${plan.summary.update} updated`);
       $("#commit").disabled = true;
     }
   } catch (err) {
-    $("#importMsg").textContent = err.message; $("#importMsg").className = "err";
+    $("#importMsg").textContent = err.message; $("#importMsg").className = "msg err";
     if (err.data?.plan) renderPlan(err.data.plan);
   }
 }
 function renderPlan(plan) {
   const s = plan.summary;
   $("#importResult").classList.remove("hidden");
-  $("#importStats").innerHTML = [["New PANs", s.create], ["Updated", s.update], ["Unchanged", s.unchanged], ["New clients", s.newClients], ["Errors", s.errors]]
-    .map(([k, v]) => `<div><b>${v}</b><span class="muted">${k}</span></div>`).join("");
+  $("#importStats").innerHTML = [["ALLOTTED", "New PANs", s.create], ["PENDING", "Updated", s.update], ["NOT_ALLOTTED", "Unchanged", s.unchanged], ["", "New clients", s.newClients], ["ERROR", "Errors", s.errors]]
+    .map(([k, label, v]) => `<div class="${k ? `k-${k}` : ""}"><b>${v}</b><span class="muted">${label}</span></div>`).join("");
   $("#importErrorsCard").classList.toggle("hidden", !plan.errors.length);
   $("#skipWrap").classList.toggle("hidden", !plan.errors.length);
   $("#importErrors").innerHTML = plan.errors.map((e) => `<tr><td>${e.rowNumber}</td><td class="err">${esc(e.message)}</td></tr>`).join("");
   $("#importRows").innerHTML = plan.rows.map((r) => `<tr><td>${r.rowNumber}</td><td><span class="tag ${r.action}">${r.action}</span></td>
-    <td class="mono">${esc(r.panMasked)}</td><td>${esc(r.holderName)}</td>${grpCell(r.clientName, r.holderName)}<td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("");
+    <td class="mono">${esc(r.panMasked)}</td><td>${esc(r.holderName)}</td>${grpCell(r.clientName, r.holderName)}<td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("")
+    || emptyRow(6, "No valid rows.");
   setGroupCol("#importRows", plan.rows, (r) => r.clientName, (r) => r.holderName);
 }
-$("#importChecks").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
+$("#importChecks").addEventListener("click", onOpen);
 $("#preview").addEventListener("click", () => runImport(true));
 $("#commit").addEventListener("click", () => runImport(false));
 $("#file").addEventListener("change", () => { $("#commit").disabled = true; $("#importResult").classList.add("hidden"); $("#importMsg").textContent = ""; $("#importChecks").innerHTML = ""; });
 $("#skipErrors").addEventListener("change", () => { $("#commit").disabled = false; });
 
-// --- Users ---
+// ---------- Users ----------
 async function loadUsers() {
   const { users } = await api("/api/users");
-  $("#userRows").innerHTML = users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role}</td>
-    <td>${u.active ? "Active" : '<span class="muted">Disabled</span>'}</td>
-    <td>${u.id === me.id ? '<span class="muted">you</span>' : `<button class="btn" data-uid="${u.id}" data-active="${u.active}">${u.active ? "Disable" : "Enable"}</button>`}</td></tr>`).join("");
+  $("#userRows").innerHTML = users.map((u) => `<tr${u.active ? "" : ' class="muted"'}>
+    <td><div class="row" style="gap:10px"><div class="avatar" style="width:28px;height:28px;font-size:11px">${esc(u.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase())}</div>${esc(u.name)}</div></td>
+    <td class="mono">${esc(u.email)}</td><td><span class="tag plain ${u.role}">${u.role === "ADMIN" ? "Admin" : "Operator"}</span></td>
+    <td>${u.active ? '<span class="tag ALLOTTED">Active</span>' : '<span class="tag NOT_ALLOTTED">Disabled</span>'}</td>
+    <td><div class="actions">${u.id === me.id ? '<span class="muted small">You</span>'
+      : u.active ? iconBtn("pause", "Disable sign-in", `data-uid="${u.id}" data-active="true"`, "danger")
+                 : iconBtn("resume", "Enable sign-in", `data-uid="${u.id}" data-active="false"`, "ok")}</div></td></tr>`).join("");
 }
 $("#userRows").addEventListener("click", async (e) => {
-  const id = e.target.dataset.uid; if (!id) return;
-  await api(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify({ active: e.target.dataset.active !== "true" }) });
-  loadUsers();
+  const b = e.target.closest("[data-uid]"); if (!b) return;
+  const enable = b.dataset.active !== "true";
+  await api(`/api/users/${b.dataset.uid}`, { method: "PATCH", body: JSON.stringify({ active: enable }) });
+  toast(enable ? "User enabled" : "User disabled"); loadUsers();
 });
 $("#userForm").addEventListener("submit", async (e) => {
   e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
-  try { await api("/api/users", { method: "POST", body: JSON.stringify(f) }); e.target.reset(); $("#userMsg").textContent = "Added."; $("#userMsg").className = ""; loadUsers(); }
-  catch (err) { $("#userMsg").textContent = err.data?.issues?.join("; ") || err.message; $("#userMsg").className = "err"; }
+  try {
+    await api("/api/users", { method: "POST", body: JSON.stringify(f) });
+    e.target.reset(); $("#userMsg").textContent = ""; toast(`User ${f.email} added`); loadUsers();
+  } catch (err) { $("#userMsg").textContent = err.data?.issues?.join("; ") || err.message; $("#userMsg").className = "msg err"; }
 });
 
-// --- Audit ---
+// ---------- Audit ----------
 async function loadAudit() {
   const { logs } = await api("/api/audit?limit=200");
-  $("#auditRows").innerHTML = logs.map((l) => `<tr><td class="muted">${new Date(l.createdAt).toLocaleString()}</td>
-    <td>${esc(l.user?.name ?? "—")}</td><td class="mono">${esc(l.action)}</td>
-    <td class="muted mono">${esc(l.details ? JSON.stringify(l.details) : "")}</td><td class="muted">${esc(l.ip)}</td></tr>`).join("");
+  $("#auditRows").innerHTML = logs.map((l) => `<tr><td class="muted small" style="white-space:nowrap">${new Date(l.createdAt).toLocaleString()}</td>
+    <td>${esc(l.user?.name ?? "—")}</td><td><span class="tag plain mono">${esc(l.action)}</span></td>
+    <td class="muted mono small" style="max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"${l.details ? ` data-tip="${esc(JSON.stringify(l.details).slice(0, 300))}"` : ""}>${esc(l.details ? JSON.stringify(l.details) : "")}</td>
+    <td class="muted small">${esc(l.ip)}</td></tr>`).join("") || emptyRow(5, "Nothing logged yet.");
 }
 
 api("/api/auth/me").then(({ user }) => { me = user; showShell(); }).catch(() => showLogin());
