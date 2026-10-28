@@ -11,6 +11,7 @@ import { loadConfig } from "../src/config.js";
 import { hashPassword } from "../src/lib/crypto.js";
 import { createRegistry } from "../src/registrars/index.js";
 import { summarize, type RegistrarAdapter } from "../src/registrars/types.js";
+import { istParts } from "../src/services/scheduler.js";
 
 const run = process.env.RUN_E2E === "1";
 const SCHEMA = "e2e_test";
@@ -27,6 +28,19 @@ const fake: RegistrarAdapter = {
     if (d === 1) return { ...summarize([{ category: "RETAIL", applicantName: "X", appliedQty: 28, allottedQty: 28, price: 500, amountAdjusted: 14000 }]), message: null };
     if (d === 2) return { ...summarize([{ category: "RETAIL", applicantName: "X", appliedQty: 28, allottedQty: 0, price: 500, amountAdjusted: 0 }]), message: null };
     return { ...summarize([]), message: null };
+  },
+};
+
+// Registrar that hasn't published yet until `published` flips; then behaves like `fake`.
+let published = false;
+let lateCalls = 0;
+const late: RegistrarAdapter = {
+  ...fake,
+  id: "late",
+  name: "Late Registrar",
+  check: async (ipo, pan) => {
+    lateCalls++;
+    return published ? fake.check(ipo, pan) : { ...summarize([]), message: null };
   },
 };
 
@@ -62,7 +76,7 @@ describe.runIf(run)("end to end", () => {
     const passwordHash = await hashPassword("e2e-password-123");
     await prisma.user.create({ data: { email: "admin@e2e.test", name: "Admin", role: "ADMIN", passwordHash } });
     await prisma.user.create({ data: { email: "operator@e2e.test", name: "Op", role: "OPERATOR", passwordHash } });
-    app = await buildApp({ ...loadConfig(), DATABASE_URL: url, LOG_LEVEL: "silent" }, { prisma, registry: createRegistry([fake]) });
+    app = await buildApp({ ...loadConfig(), DATABASE_URL: url, LOG_LEVEL: "silent" }, { prisma, registry: createRegistry([fake, late]) });
     await app.ready();
     await login("admin");
     await login("operator");
@@ -189,5 +203,86 @@ describe.runIf(run)("end to end", () => {
     const res = await app.inject({ method: "POST", url: `/api/ipos/${ipoId}/check`, ...as("operator"), payload: { scope: "errors" } });
     expect(res.json().job.total).toBe(1);
     await app.runner.cancel(res.json().job.id);
+  });
+
+  async function waitForJobs(id: number) {
+    for (let i = 0; i < 100; i++) {
+      if (!(await prisma.checkJob.count({ where: { ipoId: id, state: { in: ["QUEUED", "RUNNING"] } } }))) return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error("jobs did not finish");
+  }
+
+  const today = istParts(new Date()).date;
+  const noonIst = () => new Date(`${today}T06:30:00Z`);
+
+  it("operators can set dates and auto-check, but not archive", async () => {
+    const ok = await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { allotmentDate: today, autoCheck: false } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().ipo).toMatchObject({ autoCheck: false });
+    expect((await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { archived: true } })).statusCode).toBe(403);
+  });
+
+  it("scheduler ignores IPOs with auto-check off, and does nothing outside hours", async () => {
+    const lateIpo = await prisma.ipo.create({ data: { name: "Late Ltd - IPO", registrar: "late", registrarIpoId: "L1", allotmentDate: new Date(`${today}T00:00:00Z`) } });
+    expect((await app.scheduler.plan(noonIst())).map((p) => p.ipo.id)).toEqual([lateIpo.id]);
+
+    await app.scheduler.tick(new Date(`${today}T20:00:00Z`)); // 01:30 IST next day → different date, nothing due
+    await app.scheduler.tick(new Date(`${today}T00:30:00Z`)); // 06:00 IST, before start hour
+    expect(app.scheduler.lastTick!.entries[0]!.decision.reason).toMatch(/Outside checking hours/);
+    expect(await prisma.checkJob.count({ where: { ipoId: lateIpo.id } })).toBe(0);
+  });
+
+  it("allotment day: checks everyone, probes while unpublished, re-checks all once data is out", async () => {
+    const lateIpo = await prisma.ipo.findFirstOrThrow({ where: { registrar: "late" } });
+
+    await app.scheduler.tick(noonIst());
+    expect(app.scheduler.lastTick!.entries[0]!.decision).toMatchObject({ action: "job", scope: "unchecked" });
+    await waitForJobs(lateIpo.id);
+    expect(await prisma.checkResult.count({ where: { ipoId: lateIpo.id, status: "NOT_APPLIED" } })).toBe(3);
+
+    // Not published: a probe of the sample, then wait.
+    lateCalls = 0;
+    await app.scheduler.tick(noonIst());
+    expect(app.scheduler.lastTick!.entries[0]!.decision.reason).toMatch(/hasn't published/);
+    expect(lateCalls).toBe(3); // sample = all 3 PANs here
+    await app.scheduler.tick(noonIst());
+    expect(app.scheduler.lastTick!.entries[0]!.decision.reason).toMatch(/next probe/);
+    expect(lateCalls).toBe(3); // throttled, no new calls
+
+    // Registrar publishes; once the probe interval passes, the probe finds data and re-checks all.
+    published = true;
+    await prisma.ipo.update({ where: { id: lateIpo.id }, data: { lastProbeAt: new Date(Date.now() - 31 * 60_000) } });
+    await app.scheduler.tick(new Date());
+    expect(app.scheduler.lastTick!.entries[0]!.decision).toMatchObject({ action: "job", scope: "all" });
+    await waitForJobs(lateIpo.id);
+    expect(await prisma.checkResult.count({ where: { ipoId: lateIpo.id, status: "ALLOTTED" } })).toBe(1);
+
+    await app.scheduler.tick(new Date());
+    expect(app.scheduler.lastTick!.entries[0]!.decision).toEqual({ action: "wait", reason: "Done" });
+
+    const status = (await app.inject({ url: "/api/scheduler", ...as("operator") })).json();
+    expect(status.ipos).toHaveLength(1);
+    expect(status.ipos[0]).toMatchObject({ name: "Late Ltd - IPO", next: { action: "wait", reason: "Done" } });
+    expect(await prisma.checkJob.count({ where: { ipoId: lateIpo.id, trigger: "auto" } })).toBe(2);
+  });
+
+  it("scheduler retries errors only", async () => {
+    const lateIpo = await prisma.ipo.findFirstOrThrow({ where: { registrar: "late" } });
+    const pan = await prisma.pan.findFirstOrThrow({ where: { holderName: "Holder Three" } });
+    await prisma.checkResult.update({ where: { ipoId_panId: { ipoId: lateIpo.id, panId: pan.id } }, data: { status: "ERROR", message: "timeout" } });
+    await prisma.checkJob.updateMany({ where: { ipoId: lateIpo.id }, data: { finishedAt: new Date(Date.now() - 20 * 60_000) } });
+
+    await app.scheduler.tick(new Date());
+    expect(app.scheduler.lastTick!.entries[0]!.decision).toMatchObject({ action: "job", scope: "failed" });
+    const job = await prisma.checkJob.findFirstOrThrow({ where: { ipoId: lateIpo.id }, orderBy: { id: "desc" } });
+    expect(job).toMatchObject({ trigger: "auto", scope: "failed", total: 1 });
+    await waitForJobs(lateIpo.id);
+    expect((await prisma.checkResult.findUniqueOrThrow({ where: { ipoId_panId: { ipoId: lateIpo.id, panId: pan.id } } })).status).toBe("NOT_APPLIED");
+  });
+
+  it("only admins can trigger the scheduler manually", async () => {
+    expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("operator") })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("admin") })).statusCode).toBe(200);
   });
 });

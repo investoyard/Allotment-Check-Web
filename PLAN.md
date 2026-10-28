@@ -65,7 +65,7 @@ Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRE
 | 2 | First adapter (MUFG Intime), job queue, results storage, basic dashboard | Done; live PAN check not yet verified |
 | 3 | KFin and Bigshare adapters, Retry-After handling. BSE dropped (see notes). Captcha queue deferred: no supported registrar needs one today | Done; live PAN checks not yet verified |
 | 4 | Excel export + history report with filters | Done; e2e-tested against the DB |
-| 5 | Scheduler (auto-run on allotment day), retries, alerts | |
+| 5 | Scheduler (auto-run on allotment day, sample probes, error retries), date/auto-check editing, "Today's allotments" dashboard panel. Email/Telegram alerts skipped (dashboard-only by choice) | Done; e2e-tested |
 | 6 | Remaining registrars, IPO calendar, listing P&L | |
 
 ## Registrar notes

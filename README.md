@@ -69,6 +69,16 @@ npm run registrar -- ipos mufg        (or kfin, bigshare)
 npm run registrar -- check mufg <ipoId> <PAN>
 ```
 
+## Automatic checks on allotment day
+On the IPO page, set the **Allotment date** and keep **Auto-check on allotment day** ticked. The server then does this by itself:
+- **Every 10 minutes, 9:00–23:00 IST,** on allotment day and the day after, it checks any PANs not checked yet.
+- **If the registrar hasn't published yet** (everything comes back "not applied"), it doesn't re-check every PAN. Every 30 minutes it **probes 10 random PANs**, and once a probe finds a real application it re-checks everyone.
+- **Errors** are retried automatically, up to 3 times, 15 minutes apart.
+- **The IPOs page** shows a **Today's allotments** panel with what it's doing. Admins can click **Run scheduler now**.
+
+Settings in `.env` (optional): `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_MIN`, `SCHEDULER_START_HOUR`, `SCHEDULER_END_HOUR`.
+The server has to be running for this to work. See "Running as a service" below.
+
 ## Reports and Excel
 - **IPO page → Download Excel:** a Summary sheet plus a Results sheet for every PAN, using the filters on screen.
 - **Reports tab:** allotment history per client or per PAN.
@@ -81,6 +91,12 @@ npm run registrar -- check mufg <ipoId> <PAN>
 ## Roles
 - **ADMIN**: manage users, import and edit PANs, reveal full PANs (each reveal is logged), view the audit log.
 - **OPERATOR**: view PANs (masked), track IPOs, and run or cancel allotment checks.
+
+## Running as a service
+`npm run dev` stops when you close the terminal. To keep it running, so auto-checks happen, start it at boot with Windows Task Scheduler:
+- **Action:** `npm.cmd`, **arguments** `start`, **start in** `D:\Claude\AutoCheckAllotment`
+- **Trigger:** "At startup"
+- **Settings:** "Run whether user is logged on or not"
 
 ## Development
 ```

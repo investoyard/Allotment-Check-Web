@@ -66,6 +66,10 @@ model Ipo {
   isSme          Boolean       @default(false)
   allotmentDate  DateTime?     @db.Date
   listingDate    DateTime?     @db.Date
+  /// Let the scheduler check this IPO automatically around its allotment date
+  autoCheck      Boolean       @default(true)
+  /// Last time the scheduler probed a sample of PANs while waiting for the registrar to publish
+  lastProbeAt    DateTime?
   archived       Boolean       @default(false)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -119,8 +123,10 @@ model CheckJob {
   ipoId       Int
   ipo         Ipo       @relation(fields: [ipoId], references: [id], onDelete: Cascade)
   state       JobState  @default(QUEUED)
-  /// "all" | "unchecked" | "errors"
+  /// "all" | "unchecked" | "errors" (errors + not applied) | "failed" (errors only)
   scope       String
+  /// "manual" | "auto"
+  trigger     String    @default("manual")
   /// PAN ids to check, fixed when the job is created
   panIds      Int[]
   total       Int

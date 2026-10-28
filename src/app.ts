@@ -19,6 +19,8 @@ import { ipoRoutes, jobRoutes, registrarRoutes } from "./routes/ipos.js";
 import { reportRoutes } from "./routes/reports.js";
 import { createRegistry, type Registry } from "./registrars/index.js";
 import { JobRunner } from "./services/jobRunner.js";
+import { Scheduler } from "./services/scheduler.js";
+import { schedulerRoutes } from "./routes/scheduler.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -27,6 +29,7 @@ declare module "fastify" {
     vault: PanVault;
     registry: Registry;
     runner: JobRunner;
+    scheduler: Scheduler;
   }
 }
 
@@ -47,7 +50,9 @@ export async function buildApp(config: Config, { prisma = new PrismaClient(), re
   app.decorate("vault", new PanVault(config));
   app.decorate("registry", registry);
   app.decorate("runner", new JobRunner(prisma, app.vault, registry, app.log));
+  app.decorate("scheduler", new Scheduler(prisma, registry, app.runner, app.vault, config, app.log));
   app.addHook("onClose", async () => {
+    app.scheduler.stop();
     app.runner.stop();
     await prisma.$disconnect();
   });
@@ -78,6 +83,7 @@ export async function buildApp(config: Config, { prisma = new PrismaClient(), re
   await app.register(jobRoutes, { prefix: "/api/jobs" });
   await app.register(registrarRoutes, { prefix: "/api/registrars" });
   await app.register(reportRoutes, { prefix: "/api/reports" });
+  await app.register(schedulerRoutes, { prefix: "/api/scheduler" });
 
   await app.register(fastifyStatic, { root: publicDir });
 

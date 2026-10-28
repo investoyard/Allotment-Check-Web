@@ -13,6 +13,14 @@ const schema = z.object({
   JWT_SECRET: z.string().min(32, "must be at least 32 characters (run npm run gen-keys)"),
   PAN_ENC_KEY: key32,
   PAN_HMAC_KEY: key32,
+  SCHEDULER_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  SCHEDULER_INTERVAL_MIN: z.coerce.number().int().min(1).max(120).default(10),
+  /** Hours (IST, 0–24) between which the scheduler may contact registrars */
+  SCHEDULER_START_HOUR: z.coerce.number().int().min(0).max(23).default(9),
+  SCHEDULER_END_HOUR: z.coerce.number().int().min(1).max(24).default(23),
   COOKIE_SECURE: z
     .enum(["true", "false"])
     .default("false")

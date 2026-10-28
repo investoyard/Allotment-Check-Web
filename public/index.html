@@ -70,6 +70,13 @@
 
   <main>
     <section id="view-ipos">
+      <div class="card hidden" id="todayCard">
+        <div class="row" style="justify-content:space-between">
+          <b>Today's allotments</b>
+          <span class="row"><span id="schedInfo" class="muted"></span><button class="btn hidden" id="schedRun" data-admin-inline>Run scheduler now</button></span>
+        </div>
+        <table style="margin-top:8px"><tbody id="todayRows"></tbody></table>
+      </div>
       <div class="card">
         <div class="row">
           <b style="margin-right:8px">Add IPO</b>
@@ -80,7 +87,7 @@
         <table id="liveTable" class="hidden" style="margin-top:10px"><thead><tr><th>Registrar ID</th><th>IPO</th><th></th></tr></thead><tbody id="liveRows"></tbody></table>
       </div>
       <div class="card">
-        <table><thead><tr><th>IPO</th><th>Registrar</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Not applied</th>
+        <table><thead><tr><th>IPO</th><th>Registrar</th><th>Allotment</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Not applied</th>
           <th class="num">Errors</th><th class="num">Unchecked</th><th>Last check</th><th></th></tr></thead>
         <tbody id="ipoRows"></tbody></table>
       </div>
@@ -92,9 +99,18 @@
           <div><button class="btn" id="backToIpos">‹ IPOs</button> <b id="ipoTitle" style="font-size:16px;margin-left:8px"></b> <span id="ipoSub" class="muted"></span></div>
           <div class="row">
             <button class="btn primary" data-scope="unchecked">Check unchecked</button>
-            <button class="btn" data-scope="errors">Re-check errors / not applied</button>
+            <button class="btn" data-scope="failed">Re-check errors</button>
+            <button class="btn" data-scope="errors">Re-check errors + not applied</button>
             <button class="btn" data-scope="all">Re-check all</button>
           </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <label class="muted">Allotment date <input type="date" id="ipoAllot"></label>
+          <label class="muted">Listing date <input type="date" id="ipoList"></label>
+          <label class="muted"><input type="checkbox" id="ipoAuto"> Auto-check on allotment day</label>
+          <button class="btn" id="ipoSave">Save</button>
+          <button class="btn" id="ipoArchive" data-admin-inline>Archive</button>
+          <span id="ipoSaveMsg" class="muted"></span>
         </div>
         <div id="jobBox" class="hidden" style="margin-top:12px">
           <div class="row"><span id="jobText"></span><button class="btn" id="cancelJob">Cancel</button></div>
@@ -281,8 +297,30 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleString([], { dateStyle: "medium"
 const fmtNum = (n) => (n == null ? "" : Number(n).toLocaleString("en-IN"));
 let registrars = [], pollTimer, currentIpo = null, resPage = 1;
 const jobActive = (j) => j && (j.state === "QUEUED" || j.state === "RUNNING");
-const jobText = (j) => !j ? "Never" : jobActive(j) ? `${j.state === "QUEUED" ? "Queued" : "Running"} ${j.done}/${j.total}`
-  : `${j.state === "DONE" ? "Done" : j.state.toLowerCase()} · ${fmtDate(j.finishedAt || j.createdAt)}`;
+const jobText = (j) => !j ? "Never" : (j.trigger === "auto" ? "Auto: " : "") + (jobActive(j) ? `${j.state === "QUEUED" ? "Queued" : "Running"} ${j.done}/${j.total}`
+  : `${j.state === "DONE" ? "Done" : j.state.toLowerCase()} · ${fmtDate(j.finishedAt || j.createdAt)}`);
+const dateOnly = (d) => (d ? String(d).slice(0, 10) : "");
+const fmtDay = (d) => (d ? new Date(`${dateOnly(d)}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "");
+
+async function loadToday() {
+  let s;
+  try { s = await api("/api/scheduler"); } catch { return; }
+  $("#todayCard").classList.toggle("hidden", !s.ipos.length);
+  if (!s.ipos.length) return;
+  $("#schedInfo").textContent = !s.enabled ? "Scheduler is off (SCHEDULER_ENABLED=false)"
+    : `Auto-checks every ${s.everyMin} min, ${s.hours.start}:00–${s.hours.end}:00 IST${s.hours.insideNow ? "" : " (outside hours now)"}`
+      + (s.lastTickAt ? ` · last run ${fmtDate(s.lastTickAt)}` : "");
+  $("#todayRows").innerHTML = s.ipos.map((i) => {
+    const d = i.lastAction?.action === "wait" || !i.lastAction ? i.next : i.lastAction;
+    return `<tr><td><a class="link" data-open="${i.ipoId}">${esc(i.name)}</a></td><td class="muted">${fmtDay(i.allotmentDate)}</td>
+      <td>${esc(d.reason.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/, (iso) => fmtDate(iso)))}</td></tr>`;
+  }).join("");
+}
+$("#todayRows").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
+$("#schedRun").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  try { await api("/api/scheduler/run", { method: "POST" }); } finally { e.target.disabled = false; loadIpos(); }
+});
 
 async function loadIpos() {
   if (!registrars.length) {
@@ -293,15 +331,18 @@ async function loadIpos() {
   const regName = (id) => registrars.find((r) => r.id === id)?.name ?? id;
   $("#ipoRows").innerHTML = ipos.map((i) => `<tr>
     <td><a class="link" data-open="${i.id}">${esc(i.name)}</a></td><td class="muted">${esc(regName(i.registrar))}</td>
+    <td class="muted">${i.allotmentDate ? fmtDay(i.allotmentDate) : '<span class="tag PENDING">Set date</span>'}${i.autoCheck ? "" : ' <span class="muted">(manual)</span>'}</td>
     <td class="num"><b>${i.counts.ALLOTTED}</b></td><td class="num">${i.counts.NOT_ALLOTTED}</td><td class="num">${i.counts.NOT_APPLIED}</td>
     <td class="num">${i.counts.ERROR || ""}</td><td class="num">${i.counts.PENDING || ""}</td>
     <td class="muted">${jobText(i.job)}</td><td><button class="btn" data-open="${i.id}">Open</button></td></tr>`).join("")
     || `<tr><td colspan="9" class="muted">No IPOs tracked yet. Pick a registrar above and add one.</td></tr>`;
+  loadToday();
   if (ipos.some((i) => jobActive(i.job))) pollTimer = setTimeout(loadIpos, 4000);
 }
 function openIpo(id) {
   currentIpo = +id; resPage = 1;
   $("#resStatus").value = ""; $("#resClient").value = ""; $("#resQ").value = ""; $("#ipoMsg").textContent = "";
+  delete $("#ipoSave").dataset.dirty; $("#ipoSaveMsg").textContent = "";
   show("ipo");
 }
 $("#ipoRows").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
@@ -333,6 +374,14 @@ async function loadIpo() {
   const { ipo } = await api(`/api/ipos/${currentIpo}`);
   $("#ipoTitle").textContent = ipo.name;
   $("#ipoSub").textContent = `${registrars.find((r) => r.id === ipo.registrar)?.name ?? ipo.registrar} · ID ${ipo.registrarIpoId}`;
+  // Don't overwrite fields the user is editing while a job refresh polls.
+  if (!$("#ipoSave").dataset.dirty) {
+    $("#ipoAllot").value = dateOnly(ipo.allotmentDate);
+    $("#ipoList").value = dateOnly(ipo.listingDate);
+    $("#ipoAuto").checked = ipo.autoCheck;
+  }
+  $("#ipoArchive").textContent = ipo.archived ? "Unarchive" : "Archive";
+  $("#ipoArchive").dataset.archived = ipo.archived;
   const c = ipo.counts;
   $("#ipoStats").innerHTML = [["ALLOTTED", c.ALLOTTED], ["NOT_ALLOTTED", c.NOT_ALLOTTED], ["NOT_APPLIED", c.NOT_APPLIED], ["ERROR", c.ERROR], ["PENDING", c.PENDING]]
     .map(([k, v]) => `<div><b>${v}</b><a class="link" data-filter="${k}">${STATUS_LABEL[k]}</a></div>`).join("")
@@ -380,6 +429,22 @@ async function loadResults() {
 }
 
 $("#backToIpos").addEventListener("click", () => show("ipos"));
+["#ipoAllot", "#ipoList", "#ipoAuto"].forEach((s) => $(s).addEventListener("change", () => { $("#ipoSave").dataset.dirty = "1"; $("#ipoSaveMsg").textContent = "Unsaved changes"; }));
+$("#ipoSave").addEventListener("click", async () => {
+  try {
+    await api(`/api/ipos/${currentIpo}`, { method: "PATCH", body: JSON.stringify({
+      allotmentDate: $("#ipoAllot").value || null, listingDate: $("#ipoList").value || null, autoCheck: $("#ipoAuto").checked,
+    }) });
+    delete $("#ipoSave").dataset.dirty;
+    $("#ipoSaveMsg").textContent = "Saved"; $("#ipoSaveMsg").className = "muted";
+  } catch (err) { $("#ipoSaveMsg").textContent = err.message; $("#ipoSaveMsg").className = "err"; }
+});
+$("#ipoArchive").addEventListener("click", async (e) => {
+  const archived = e.target.dataset.archived !== "true";
+  if (archived && !confirm("Archive this IPO? It disappears from the IPO list and auto-checks stop. Results stay in reports.")) return;
+  await api(`/api/ipos/${currentIpo}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+  show(archived ? "ipos" : "ipo");
+});
 document.querySelectorAll("[data-scope]").forEach((b) => b.addEventListener("click", async () => {
   if (b.dataset.scope === "all" && !confirm("Re-check every PAN for this IPO?")) return;
   $("#ipoMsg").textContent = "";

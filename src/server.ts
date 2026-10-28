@@ -7,6 +7,7 @@ const app = await buildApp(config);
 try {
   await app.listen({ port: config.PORT, host: config.HOST });
   await app.runner.resume();
+  if (config.SCHEDULER_ENABLED) app.scheduler.start();
 } catch (err) {
   app.log.error(err);
   process.exit(1);

@@ -3,6 +3,7 @@ import type { AllotmentStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireAdmin, requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
+import { CHECK_SCOPES, createCheckJob } from "../services/checkJobs.js";
 import { ipoWorkbook, type IpoExportRow } from "../services/excel.js";
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
@@ -21,8 +22,11 @@ const updateBody = z.object({
   name: z.string().trim().min(1).optional(),
   allotmentDate: dateField,
   listingDate: dateField,
+  autoCheck: z.boolean().optional(),
   archived: z.boolean().optional(),
 });
+/** Operators may set dates and auto-check; renaming and archiving are admin-only. */
+const ADMIN_ONLY_FIELDS = ["name", "archived"] as const;
 
 const STATUSES = ["ALLOTTED", "NOT_ALLOTTED", "NOT_APPLIED", "ERROR"] as const;
 
@@ -34,7 +38,7 @@ const resultsQuery = z.object({
   pageSize: z.coerce.number().int().min(1).max(500).default(100),
 });
 
-const checkBody = z.object({ scope: z.enum(["all", "unchecked", "errors"]).default("unchecked") });
+const checkBody = z.object({ scope: z.enum(CHECK_SCOPES).default("unchecked") });
 export const fullPanQuery = z.object({ fullPan: z.enum(["true", "false"]).default("false") });
 
 /** Sends an .xlsx download with a safe file name, e.g. "Paras Healthcare allotment 2026-10-28.xlsx". */
@@ -105,9 +109,12 @@ export async function ipoRoutes(app: FastifyInstance) {
     return reply.code(201).send({ ipo });
   });
 
-  app.patch("/:id", { preHandler: requireAdmin }, async (req, reply) => {
+  app.patch("/:id", async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = updateBody.parse(req.body);
+    if (req.currentUser!.role !== "ADMIN" && ADMIN_ONLY_FIELDS.some((f) => body[f] !== undefined)) {
+      return reply.code(403).send({ error: "Only admins can rename or archive IPOs" });
+    }
     if (!(await app.prisma.ipo.findUnique({ where: { id } }))) return reply.code(404).send({ error: "IPO not found" });
     const ipo = await app.prisma.ipo.update({
       where: { id },
@@ -211,22 +218,11 @@ export async function ipoRoutes(app: FastifyInstance) {
     const ipo = await app.prisma.ipo.findUnique({ where: { id } });
     if (!ipo) return reply.code(404).send({ error: "IPO not found" });
 
-    const running = await app.prisma.checkJob.findFirst({ where: { ipoId: id, state: { in: ["QUEUED", "RUNNING"] } } });
-    if (running) return reply.code(409).send({ error: "A check is already running for this IPO", job: running });
-
-    const where: Prisma.PanWhereInput = { active: true };
-    if (scope === "unchecked") where.results = { none: { ipoId: id } };
-    // NOT_APPLIED is included: registrars sometimes publish data in batches on allotment day.
-    if (scope === "errors") where.results = { some: { ipoId: id, status: { in: ["ERROR", "NOT_APPLIED"] } } };
-    const pans = await app.prisma.pan.findMany({ where, select: { id: true }, orderBy: { id: "asc" } });
-    if (!pans.length) return reply.code(400).send({ error: "No PANs to check for this selection" });
-
-    const job = await app.prisma.checkJob.create({
-      data: { ipoId: id, scope, panIds: pans.map((p) => p.id), total: pans.length, createdById: req.currentUser!.id },
-    });
-    app.runner.enqueue(job.id, ipo.registrar);
-    await audit(req, "ipo.check", { entity: "Ipo", entityId: id, details: { jobId: job.id, scope, total: job.total } });
-    return reply.code(202).send({ job });
+    const r = await createCheckJob(app.prisma, app.runner, ipo, scope, { userId: req.currentUser!.id });
+    if (!r.ok && r.reason === "running") return reply.code(409).send({ error: "A check is already running for this IPO", job: r.job });
+    if (!r.ok) return reply.code(400).send({ error: "No PANs to check for this selection" });
+    await audit(req, "ipo.check", { entity: "Ipo", entityId: id, details: { jobId: r.job.id, scope, total: r.job.total } });
+    return reply.code(202).send({ job: r.job });
   });
 }
 
