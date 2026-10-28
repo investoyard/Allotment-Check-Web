@@ -157,6 +157,19 @@ describe.runIf(run)("end to end", () => {
     expect(none.statusCode).toBe(400); // nothing left unchecked
   });
 
+  it("results grid: admins see full PANs, operators masked; search by full PAN", async () => {
+    const asAdmin = (await app.inject({ url: `/api/ipos/${ipoId}/results?status=ALLOTTED`, ...as("admin") })).json();
+    expect(asAdmin.fullPan).toBe(true);
+    expect(asAdmin.rows[0]).toMatchObject({ pan: "AAAPA0001A", panMasked: "AAAPA****A" });
+    const asOp = (await app.inject({ url: `/api/ipos/${ipoId}/results?status=ALLOTTED`, ...as("operator") })).json();
+    expect(asOp.fullPan).toBe(false);
+    expect(asOp.rows[0].pan).toBe("AAAPA****A");
+    expect(JSON.stringify(asOp)).not.toContain("AAAPA0001A");
+    expect(JSON.stringify(asOp)).not.toContain("panEncrypted");
+    const byPan = (await app.inject({ url: `/api/ipos/${ipoId}/results?q=aaapb0002b`, ...as("operator") })).json();
+    expect(byPan.rows.map((r: { holderName: string }) => r.holderName)).toEqual(["Holder Two"]);
+  });
+
   it("filters results", async () => {
     const res = await app.inject({ url: `/api/ipos/${ipoId}/results?status=ALLOTTED`, ...as("operator") });
     expect(res.json().rows).toHaveLength(1);

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAdmin, requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { CHECK_SCOPES, createCheckJob } from "../services/checkJobs.js";
+import { isValidPan, normalizePan } from "../lib/pan.js";
 import { ipoWorkbook, type IpoExportRow } from "../services/excel.js";
 import { listingGain } from "../services/reports.js";
 import type { IpoRef } from "../registrars/types.js";
@@ -153,10 +154,14 @@ export async function ipoRoutes(app: FastifyInstance) {
     if (status === "PENDING") where.results = { none: { ipoId: id } };
     else if (status) where.results = { some: { ipoId: id, status: status as AllotmentStatus } };
     if (q) {
-      where.OR = [
-        { holderName: { contains: q, mode: "insensitive" } },
-        { client: { name: { contains: q, mode: "insensitive" } } },
-      ];
+      // A full PAN is matched exactly through its hash; anything else searches names.
+      const asPan = normalizePan(q);
+      where.OR = isValidPan(asPan)
+        ? [{ panHash: app.vault.hash(asPan) }]
+        : [
+            { holderName: { contains: q, mode: "insensitive" } },
+            { client: { name: { contains: q, mode: "insensitive" } } },
+          ];
     }
     return where;
   }
@@ -178,17 +183,25 @@ export async function ipoRoutes(app: FastifyInstance) {
         select: {
           id: true,
           panMasked: true,
+          panEncrypted: true,
           holderName: true,
           client: { select: { id: true, name: true } },
           results: { where: { ipoId: id }, omit: { raw: true } },
         },
       }),
     ]);
+    // Admins see full PANs in the results grid; operators only the masked form.
+    const admin = req.currentUser!.role === "ADMIN";
     return {
       total,
       page,
       pageSize,
-      rows: pans.map(({ results, ...p }) => ({ ...p, result: results[0] ?? null })),
+      fullPan: admin,
+      rows: pans.map(({ results, panEncrypted, ...p }) => ({
+        ...p,
+        pan: admin ? app.vault.open(panEncrypted) : p.panMasked,
+        result: results[0] ?? null,
+      })),
     };
   });
 

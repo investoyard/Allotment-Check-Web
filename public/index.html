@@ -120,6 +120,14 @@
   td.empty { text-align:center; color:var(--muted); padding:28px 12px; }
   td input.edit { width:100%; min-width:110px; height:32px; }
   table.no-grp .grp { display:none; }
+  /* Results grid: optional columns hide when the registrar returned nothing for them */
+  table.no-cat .opt-cat, table.no-price .opt-price, table.no-amt .opt-amt { display:none; }
+  table.results td, table.results th { padding-top:9px; padding-bottom:9px; }
+  table.results .rn { width:44px; color:var(--muted); font-size:12px; }
+  table.results td.pan { font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-size:13px; letter-spacing:.03em; white-space:nowrap; }
+  table.results td.name { font-weight:500; min-width:220px; }
+  table.results td.qty { width:90px; }
+  table.results .tag { cursor:default; }
   .table-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border-top:1px solid var(--line); background:var(--surface-2); }
   .pager { display:flex; gap:6px; align-items:center; }
 
@@ -395,13 +403,13 @@
               <select id="resStatus"><option value="">All statuses</option><option value="ALLOTTED">Allotted</option><option value="NOT_ALLOTTED">Not allotted</option>
                 <option value="NOT_APPLIED">Not applied</option><option value="ERROR">Error</option><option value="PENDING">Unchecked</option></select>
               <select id="resClient"><option value="">All clients</option></select>
-              <div class="search" style="min-width:200px"><svg class="ic"><use href="#i-search"/></svg><input id="resQ" placeholder="Search name"></div>
+              <div class="search" style="min-width:200px"><svg class="ic"><use href="#i-search"/></svg><input id="resQ" placeholder="Search name or full PAN"></div>
               <label class="check" data-admin-inline data-tip="Include full PAN numbers (recorded in the audit log)"><input type="checkbox" id="resFullPan"> Full PANs</label>
               <button class="btn" id="resExport"><svg class="ic"><use href="#i-download"/></svg>Download Excel</button>
             </div>
           </div>
-          <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Status</th><th class="num">Applied</th><th class="num">Allotted</th>
-            <th>Category</th><th class="num">Price</th><th class="num">Amt adjusted</th><th>Checked</th></tr></thead>
+          <div class="table-wrap" style="margin-top:12px"><table class="results"><thead><tr><th class="num rn">#</th><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Status</th>
+            <th class="num">Applied</th><th class="num">Allotted</th><th class="opt-cat">Category</th><th class="num opt-price">Price</th><th class="num opt-amt">Amt adjusted</th></tr></thead>
           <tbody id="resRows"></tbody></table></div>
           <div class="table-foot"><span id="resPage" class="muted small"></span>
             <div class="pager"><button class="icon-btn" id="resPrev" data-tip="Previous page" aria-label="Previous"><svg class="ic"><use href="#i-chev-left"/></svg></button>
@@ -413,22 +421,26 @@
       <section id="view-reports" class="hidden">
         <div class="card">
           <div class="row">
-            <label class="fld">From<input type="date" id="repFrom"></label>
-            <label class="fld">To<input type="date" id="repTo"></label>
+            <label class="fld" style="min-width:320px">IPO<select id="repIpo"><option value="">Select an IPO…</option></select></label>
             <label class="fld">Client<select id="repClient"><option value="">All clients</option></select></label>
-            <label class="fld">Registrar<select id="repRegistrar"><option value="">All registrars</option></select></label>
-            <label class="fld">IPO<select id="repIpo"><option value="">All IPOs</option></select></label>
             <label class="fld">View<select id="repGroup"><option value="client">Group by client</option><option value="pan">Group by PAN</option></select></label>
             <span class="grow"></span>
             <label class="check" data-admin-inline data-tip="Include full PAN numbers (recorded in the audit log)"><input type="checkbox" id="repFullPan"> Full PANs</label>
-            <button class="btn primary" id="repExport"><svg class="ic"><use href="#i-download"/></svg>Download Excel</button>
+            <button class="btn primary" id="repExport" disabled><svg class="ic"><use href="#i-download"/></svg>Download Excel</button>
           </div>
           <div class="callout" style="margin-top:14px"><svg class="ic"><use href="#i-info"/></svg>
-            <span>Dates match the IPO's allotment date (or the date it was added, if none is set). Only applications actually found count as
-              "applied"; Not applied and errors are left out of the ratio.</span></div>
+            <span>Only applications actually found count as "applied"; Not applied and errors are left out of the ratio.
+              Deleted PANs still appear, marked "deleted".</span></div>
         </div>
-        <div class="stats" id="repStats"></div>
-        <div class="card flush"><div class="table-wrap"><table><thead id="repHead"></thead><tbody id="repRows"></tbody></table></div></div>
+        <div id="repEmpty" class="card" style="text-align:center;padding:48px 18px">
+          <div class="brand-mark" style="margin:0 auto 14px;background:var(--accent-soft);color:var(--accent);box-shadow:none"><svg class="ic"><use href="#i-chart"/></svg></div>
+          <b style="font-size:15px">Select an IPO to see its report</b>
+          <p class="muted" style="margin:6px 0 0">Pick an IPO from the list above. You'll get allotment counts, shares, value and listing gain for every PAN.</p>
+        </div>
+        <div id="repBody" class="hidden">
+          <div class="stats" id="repStats"></div>
+          <div class="card flush"><div class="table-wrap"><table><thead id="repHead"></thead><tbody id="repRows"></tbody></table></div></div>
+        </div>
       </section>
 
       <!-- ---------- PANs ---------- -->
@@ -626,7 +638,7 @@ async function api(path, opts = {}) {
 const PAGES = {
   ipos: ["IPOs", "Track IPOs and check allotment for every PAN"],
   ipo: ["IPO details", ""],
-  reports: ["Reports", "Allotment history across IPOs"],
+  reports: ["Reports", "Allotment report for one IPO"],
   pans: ["PANs", "Your clients' PAN list"],
   import: ["Import PANs", "Add or update PANs from Excel"],
   users: ["Users", "Who can sign in"],
@@ -709,52 +721,80 @@ function gainCell(r) {
   return `<td class="num${r.listingGain < 0 ? " err" : ""}" style="${r.listingGain > 0 ? "color:var(--ok)" : ""}">${gainText(r.listingGain)}${partial}</td>`;
 }
 async function fillReportFilters() {
-  if ($("#repClient").dataset.loaded) return;
   if (!registrars.length) ({ registrars } = await api("/api/registrars"));
+  // The IPO list is refreshed each visit so newly tracked IPOs show up; the selection is kept.
   const [{ clients }, { ipos }] = await Promise.all([api("/api/clients"), api("/api/ipos")]);
-  // Without real groups, "group by client" would just repeat the per-PAN list.
-  const grouped = fillGroupSelect("#repClient", clients);
-  if (!grouped) $("#repGroup").value = "pan";
-  $("#repGroup").closest("label").classList.toggle("hidden", !grouped);
-  $("#repRegistrar").innerHTML = `<option value="">All registrars</option>` + registrars.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
-  $("#repIpo").innerHTML = `<option value="">All IPOs</option>` + ipos.map((i) => `<option value="${i.id}">${esc(i.name)}</option>`).join("");
-  $("#repClient").dataset.loaded = "1";
+  const cur = $("#repIpo").value;
+  const regName = (id) => registrars.find((r) => r.id === id)?.name ?? id;
+  $("#repIpo").innerHTML = `<option value="">Select an IPO…</option>` + ipos.map((i) =>
+    `<option value="${i.id}">${esc(i.name)}${i.allotmentDate ? ` · ${fmtDay(i.allotmentDate)}` : ""} · ${esc(regName(i.registrar))}</option>`).join("");
+  $("#repIpo").value = ipos.some((i) => String(i.id) === cur) ? cur : "";
+  if (!$("#repClient").dataset.loaded) {
+    // Without real groups, "group by client" would just repeat the per-PAN list.
+    const grouped = fillGroupSelect("#repClient", clients);
+    if (!grouped) $("#repGroup").value = "pan";
+    $("#repGroup").closest("label").classList.toggle("hidden", !grouped);
+    $("#repClient").dataset.loaded = "1";
+  }
 }
 function reportParams() {
-  const p = new URLSearchParams();
-  for (const [k, sel] of [["from", "#repFrom"], ["to", "#repTo"], ["clientId", "#repClient"], ["registrar", "#repRegistrar"], ["ipoId", "#repIpo"]]) {
-    if ($(sel).value) p.set(k, $(sel).value);
-  }
+  const p = new URLSearchParams({ ipoId: $("#repIpo").value });
+  if ($("#repClient").value) p.set("clientId", $("#repClient").value);
   return p;
+}
+/** One PAN's outcome in a single-IPO report. */
+function panStatus(r) {
+  if (r.allotted) return "ALLOTTED";
+  if (r.notAllotted) return "NOT_ALLOTTED";
+  if (r.errors) return "ERROR";
+  return "NOT_APPLIED";
 }
 async function loadReport() {
   await fillReportFilters();
+  const chosen = !!$("#repIpo").value;
+  $("#repEmpty").classList.toggle("hidden", chosen);
+  $("#repBody").classList.toggle("hidden", !chosen);
+  $("#repExport").disabled = !chosen;
+  if (!chosen) return;
+
   const p = reportParams(); p.set("groupBy", $("#repGroup").value);
   const { totals: t, rows, groupBy } = await api(`/api/reports/history?${p}`);
-  $("#repStats").innerHTML = [["", "IPOs", t.ipos], ["", "PANs", t.pans], ["", "Applications", t.applications], ["ALLOTTED", "Allotted", t.allotted],
+  $("#repStats").innerHTML = [["", "PANs checked", t.pans], ["", "Applications", t.applications], ["ALLOTTED", "Allotted", t.allotted],
     ["", "Allotment ratio", pct(t.ratio)], ["", "Shares allotted", fmtNum(t.sharesAllotted)],
     ["", "Allotted value", !t.allotted ? "—" : t.allottedValue ? rupees(t.allottedValue) : hint("set issue price")],
     ["", "Listing gain" + (t.gainUnknown && t.gainUnknown < t.allotted ? "*" : ""),
       !t.allotted ? "—" : t.gainUnknown === t.allotted ? hint("set listing price") : gainText(t.listingGain)]]
     .map(([k, label, v]) => `<div class="${k ? `k-${k}` : ""}"><b>${v}</b><span class="muted">${label}</span></div>`).join("")
     + (t.allotted && t.gainUnknown
-      ? `<div class="note">${t.gainUnknown === t.allotted ? "" : `* ${t.gainUnknown} allotment(s) not counted. `}Enter the issue and listing price on each IPO's page to see value and listing gain.</div>`
+      ? `<div class="note">${t.gainUnknown === t.allotted ? "" : `* ${t.gainUnknown} allotment(s) not counted. `}Enter the issue and listing price on the IPO's page to see value and listing gain.</div>`
       : "");
+
   const byPan = groupBy === "pan";
-  $("#repHead").innerHTML = `<tr>${byPan ? '<th>Name</th><th>PAN</th><th class="grp">Client</th>' : "<th>Client</th>"}
-    <th class="num">IPOs applied</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Ratio</th>
-    <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Listing gain</th><th class="num">Errors</th></tr>`;
-  $("#repRows").innerHTML = rows.map((r) => `<tr${r.deleted ? ' class="muted"' : ""}>${byPan
-    ? `<td>${esc(r.label)}${r.deleted ? ' <span class="tag plain" data-tip="PAN deleted; results kept">deleted</span>' : ""}</td><td class="mono">${esc(r.panMasked)}</td>${grpCell(r.clientName, r.label)}`
-    : `<td>${esc(r.label)}</td>`}
-    <td class="num">${r.applied}</td><td class="num"><b>${r.allotted}</b></td><td class="num">${r.notAllotted}</td><td class="num">${pct(r.ratio)}</td>
-    <td class="num">${fmtNum(r.sharesApplied)}</td><td class="num">${fmtNum(r.sharesAllotted)}</td>${valueCell(r)}
-    ${gainCell(r)}<td class="num">${r.errors || ""}</td></tr>`).join("")
-    || emptyRow(byPan ? 12 : 10, "No checked results match these filters yet.");
-  if (byPan) setGroupCol("#repRows", rows, (r) => r.clientName, (r) => r.label);
-  else $("#repRows").closest("table").classList.remove("no-grp");
+  if (byPan) {
+    $("#repHead").innerHTML = `<tr><th>Name</th><th>PAN</th><th class="grp">Client</th><th>Status</th>
+      <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Listing gain</th></tr>`;
+    $("#repRows").innerHTML = rows.map((r) => {
+      const st = panStatus(r);
+      return `<tr${r.deleted ? ' class="muted"' : ""}>
+        <td style="font-weight:500">${esc(r.label)}${r.deleted ? ' <span class="tag plain" data-tip="PAN deleted; results kept">deleted</span>' : ""}</td>
+        <td class="mono">${esc(r.panMasked)}</td>${grpCell(r.clientName, r.label)}
+        <td><span class="tag ${st}">${STATUS_LABEL[st]}</span></td>
+        <td class="num">${fmtNum(r.sharesApplied) || ""}</td><td class="num">${r.sharesAllotted ? `<b style="color:var(--ok)">${fmtNum(r.sharesAllotted)}</b>` : r.applied ? "0" : ""}</td>
+        ${valueCell(r)}${gainCell(r)}</tr>`;
+    }).join("") || emptyRow(8, "No checked results for this IPO yet. Run a check on the IPO page first.");
+    setGroupCol("#repRows", rows, (r) => r.clientName, (r) => r.label);
+  } else {
+    $("#repHead").innerHTML = `<tr><th>Client</th><th class="num">PANs applied</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Ratio</th>
+      <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Listing gain</th><th class="num">Errors</th></tr>`;
+    $("#repRows").innerHTML = rows.map((r) => `<tr><td style="font-weight:500">${esc(r.label)}</td>
+      <td class="num">${r.applied}</td><td class="num"><b>${r.allotted}</b></td><td class="num">${r.notAllotted}</td><td class="num">${pct(r.ratio)}</td>
+      <td class="num">${fmtNum(r.sharesApplied)}</td><td class="num">${fmtNum(r.sharesAllotted)}</td>${valueCell(r)}
+      ${gainCell(r)}<td class="num">${r.errors || ""}</td></tr>`).join("")
+      || emptyRow(10, "No checked results for this IPO yet. Run a check on the IPO page first.");
+    $("#repRows").closest("table").classList.remove("no-grp");
+  }
 }
-["#repFrom", "#repTo", "#repClient", "#repRegistrar", "#repIpo", "#repGroup"].forEach((s) => $(s).addEventListener("change", loadReport));
+["#repClient", "#repIpo", "#repGroup"].forEach((s) => $(s).addEventListener("change", loadReport));
 $("#repExport").addEventListener("click", () => {
   const p = reportParams(); p.set("fullPan", fullPanParam("#repFullPan"));
   download(`/api/reports/history/export?${p}`);
@@ -930,17 +970,25 @@ async function loadResults() {
   if ($("#resQ").value.trim()) p.set("q", $("#resQ").value.trim());
   const { total, rows, pageSize } = await api(`/api/ipos/${currentIpo}/results?${p}`);
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  $("#resPage").textContent = `${total} PANs · page ${resPage} of ${pages}`;
+  const from = total ? (resPage - 1) * pageSize + 1 : 0;
+  $("#resPage").textContent = total ? `Showing ${from}–${from + rows.length - 1} of ${total} PANs` : "No PANs";
   $("#resPrev").disabled = resPage <= 1; $("#resNext").disabled = resPage >= pages;
-  $("#resRows").innerHTML = rows.map(({ result: r, ...p }) => {
+  $("#resRows").innerHTML = rows.map(({ result: r, ...p }, i) => {
     const st = r ? r.status : "PENDING";
-    return `<tr><td class="mono">${esc(p.panMasked)}</td><td>${esc(p.holderName)}</td>${grpCell(p.client.name, p.holderName)}
-      <td><span class="tag ${st}"${r?.message ? ` data-tip="${esc(r.message)}"` : ""}>${STATUS_LABEL[st]}</span>${r?.message ? `<div class="muted small">${esc(r.message)}</div>` : ""}</td>
-      <td class="num">${fmtNum(r?.appliedQty)}</td><td class="num">${st === "ALLOTTED" ? `<b style="color:var(--ok)">${fmtNum(r.allottedQty)}</b>` : fmtNum(r?.allottedQty)}</td>
-      <td>${esc(r?.category)}</td><td class="num">${fmtNum(r?.price)}</td><td class="num">${fmtNum(r?.amountAdjusted)}</td>
-      <td class="muted small">${fmtDate(r?.checkedAt)}</td></tr>`;
+    // Hovering the status shows when it was checked (and any registrar message).
+    const tipText = r ? `Checked: ${fmtDate(r.checkedAt)}${r.message ? ` · ${r.message}` : ""}` : "Not checked yet";
+    return `<tr><td class="num rn">${from + i}</td><td class="pan">${esc(p.pan)}</td><td class="name">${esc(p.holderName)}</td>${grpCell(p.client.name, p.holderName)}
+      <td><span class="tag ${st}" data-tip="${esc(tipText)}">${STATUS_LABEL[st]}</span>${r?.message ? `<div class="muted small">${esc(r.message)}</div>` : ""}</td>
+      <td class="num qty">${fmtNum(r?.appliedQty)}</td>
+      <td class="num qty">${st === "ALLOTTED" ? `<b style="color:var(--ok)">${fmtNum(r.allottedQty)}</b>` : fmtNum(r?.allottedQty)}</td>
+      <td class="opt-cat">${esc(r?.category)}</td><td class="num opt-price">${fmtNum(r?.price)}</td><td class="num opt-amt">${fmtNum(r?.amountAdjusted)}</td></tr>`;
   }).join("") || emptyRow(10, "No PANs match.");
   setGroupCol("#resRows", rows, (r) => r.client.name, (r) => r.holderName);
+  // Hide Category / Price / Amount adjusted when no row on this page has a value.
+  const t = $("#resRows").closest("table");
+  t.classList.toggle("no-cat", !rows.some((x) => x.result?.category));
+  t.classList.toggle("no-price", !rows.some((x) => x.result?.price != null));
+  t.classList.toggle("no-amt", !rows.some((x) => x.result?.amountAdjusted != null));
 }
 
 $("#backToIpos").addEventListener("click", () => show("ipos"));
