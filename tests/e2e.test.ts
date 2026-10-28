@@ -1,4 +1,4 @@
-// End-to-end test against the real Postgres, in a throwaway schema, with a fake registrar.
+﻿// End-to-end test against the real Postgres, in a throwaway schema, with a fake registrar.
 // Run with:  npm run test:e2e
 import { execSync } from "node:child_process";
 import "dotenv/config";
@@ -76,7 +76,7 @@ describe.runIf(run)("end to end", () => {
     const passwordHash = await hashPassword("e2e-password-123");
     await prisma.user.create({ data: { email: "admin@e2e.test", name: "Admin", role: "ADMIN", passwordHash } });
     await prisma.user.create({ data: { email: "operator@e2e.test", name: "Op", role: "OPERATOR", passwordHash } });
-    app = await buildApp({ ...loadConfig(), DATABASE_URL: url, LOG_LEVEL: "silent" }, { prisma, registry: createRegistry([fake, late]) });
+    app = await buildApp({ ...loadConfig(), DATABASE_URL: url, LOG_LEVEL: (process.env.E2E_LOG ?? "silent") as "silent" }, { prisma, registry: createRegistry([fake, late]) });
     await app.ready();
     await login("admin");
     await login("operator");
@@ -227,7 +227,7 @@ describe.runIf(run)("end to end", () => {
     const lateIpo = await prisma.ipo.create({ data: { name: "Late Ltd - IPO", registrar: "late", registrarIpoId: "L1", allotmentDate: new Date(`${today}T00:00:00Z`) } });
     expect((await app.scheduler.plan(noonIst())).map((p) => p.ipo.id)).toEqual([lateIpo.id]);
 
-    await app.scheduler.tick(new Date(`${today}T20:00:00Z`)); // 01:30 IST next day → different date, nothing due
+    await app.scheduler.tick(new Date(`${today}T20:00:00Z`)); // 01:30 IST next day â†’ different date, nothing due
     await app.scheduler.tick(new Date(`${today}T00:30:00Z`)); // 06:00 IST, before start hour
     expect(app.scheduler.lastTick!.entries[0]!.decision.reason).toMatch(/Outside checking hours/);
     expect(await prisma.checkJob.count({ where: { ipoId: lateIpo.id } })).toBe(0);
@@ -287,7 +287,7 @@ describe.runIf(run)("end to end", () => {
 
     const patch = await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { listingPrice: 612.5 } });
     expect(patch.statusCode).toBe(200);
-    // Holder One: 28 shares, registrar price 500 → (612.5 − 500) × 28
+    // Holder One: 28 shares, registrar price 500 â†’ (612.5 âˆ’ 500) Ã— 28
     expect((await app.inject({ url: `/api/ipos/${ipoId}`, ...as("operator") })).json().ipo.listingGain).toBe(3150);
 
     await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { issuePrice: 520 } });
@@ -317,9 +317,9 @@ describe.runIf(run)("end to end", () => {
   it("uploading new PANs checks them straight away for the chosen IPOs", async () => {
     const csv = ["PAN,Name,Client", "AAAPD0001D,New Holder,Family C", "AAAPE0002E,Other New,Family C"].join("\n");
     const res = await app.inject({ method: "POST", url: `/api/pans/import?dryRun=false&checkIpoIds=${ipoId}`, ...as("admin"), ...multipart("new.csv", csv) });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode, res.body).toBe(200);
     const [c] = res.json().checks;
-    // Only the 2 new PANs — the 3 existing ones already have results for this IPO.
+    // Only the 2 new PANs â€” the 3 existing ones already have results for this IPO.
     expect(c).toMatchObject({ ipoId, total: 2 });
     const job = await prisma.checkJob.findUniqueOrThrow({ where: { id: c.jobId } });
     expect(job.trigger).toBe("import");

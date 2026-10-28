@@ -103,6 +103,17 @@ describe("MufgIntimeAdapter", () => {
   });
 });
 
+describe("isTransientDbError", () => {
+  it("retries connection-level errors only", async () => {
+    const { isTransientDbError } = await import("../src/services/jobRunner.js");
+    const { Prisma } = await import("@prisma/client");
+    expect(isTransientDbError(new Prisma.PrismaClientUnknownRequestError("Response from the Engine was empty", { clientVersion: "6" }))).toBe(true);
+    expect(isTransientDbError(new Prisma.PrismaClientKnownRequestError("timeout", { code: "P2024", clientVersion: "6" }))).toBe(true);
+    expect(isTransientDbError(new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "6" }))).toBe(false);
+    expect(isTransientDbError(new Error("HTTP 403"))).toBe(false);
+  });
+});
+
 describe("checkWithRetry", () => {
   const adapter = (impl: RegistrarAdapter["check"]): RegistrarAdapter => ({ id: "t", name: "t", minDelayMs: 0, listIpos: async () => [], check: impl });
   const noSleep = { backoffMs: [1, 1, 1], sleepFn: async () => {} };

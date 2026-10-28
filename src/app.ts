@@ -53,7 +53,7 @@ export async function buildApp(config: Config, { prisma = new PrismaClient(), re
   app.decorate("scheduler", new Scheduler(prisma, registry, app.runner, app.vault, config, app.log));
   app.addHook("onClose", async () => {
     app.scheduler.stop();
-    app.runner.stop();
+    await app.runner.stop();
     await prisma.$disconnect();
   });
 

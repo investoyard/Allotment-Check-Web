@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+﻿import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
@@ -55,7 +55,7 @@ describe("app", () => {
   });
 
   it("validates login input", async () => {
-    const res = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "nope", password: "" } });
+    const res = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "", password: "" } });
     expect(res.statusCode).toBe(400);
   });
 

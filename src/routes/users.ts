@@ -7,8 +7,17 @@ import { hashPassword } from "../lib/crypto.js";
 const password = z.string().min(10, "Password must be at least 10 characters");
 const role = z.enum(["ADMIN", "OPERATOR"]);
 
+/** Login name: a username or an email address, stored lowercase. */
+export const loginName = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, "Username must be at least 3 characters")
+  .max(100)
+  .regex(/^[a-z0-9._@+-]+$/, "Use letters, digits and . _ @ + - only");
+
 const createBody = z.object({
-  email: z.string().trim().toLowerCase().email(),
+  email: loginName,
   name: z.string().trim().min(1),
   password,
   role: role.default("OPERATOR"),

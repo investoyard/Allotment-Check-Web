@@ -8,6 +8,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const jitter = (ms: number) => ms + Math.floor(Math.random() * ms * 0.5);
 
 export const RETRY_BACKOFF_MS = [3_000, 10_000, 30_000];
+const MAX_CRASH_RETRIES = 3;
+const CRASH_RETRY_MS = 2_000;
+
+// Connection/engine-level Prisma failures that are worth retrying. Data errors (bad input,
+// constraint violations) are not.
+const TRANSIENT_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028", "P2034"]);
+export function isTransientDbError(err: unknown): boolean {
+  const e = err as { name?: string; code?: string; constructor?: { name?: string } };
+  const name = e?.constructor?.name ?? e?.name;
+  if (name === "PrismaClientUnknownRequestError" || name === "PrismaClientInitializationError") return true;
+  return name === "PrismaClientKnownRequestError" && !!e.code && TRANSIENT_CODES.has(e.code);
+}
 
 /** Runs one check, retrying transient failures. Never throws — failures become ERROR results. */
 export async function checkWithRetry(
@@ -71,20 +83,30 @@ export class JobRunner {
   }
 
   async cancel(jobId: number) {
-    this.cancelled.add(jobId);
+    let wasQueued = false;
     for (const q of this.queues.values()) {
       const i = q.indexOf(jobId);
-      if (i >= 0) q.splice(i, 1);
+      if (i >= 0) {
+        q.splice(i, 1);
+        wasQueued = true;
+      }
     }
+    // Only a job that's (about to be) running needs the in-memory flag; a queued one is just dropped.
+    if (!wasQueued) this.cancelled.add(jobId);
     await this.prisma.checkJob.updateMany({
       where: { id: jobId, state: { in: ["QUEUED", "RUNNING"] } },
       data: { state: "CANCELLED", finishedAt: new Date() },
     });
   }
 
-  stop() {
+  /** Stops picking up work and waits (up to `timeoutMs`) for in-flight steps to finish. */
+  async stop(timeoutMs = 15_000) {
     this.stopping = true;
+    const until = Date.now() + timeoutMs;
+    while (this.active.size && Date.now() < until) await sleep(50);
   }
+
+  private crashRetries = new Map<number, number>();
 
   private async drain(registrar: string) {
     if (this.active.has(registrar)) return;
@@ -95,7 +117,20 @@ export class JobRunner {
         const jobId = q.shift()!;
         try {
           await this.run(jobId);
+          this.crashRetries.delete(jobId);
         } catch (err) {
+          if (this.stopping) return; // shutting down: the job stays queued/running and resumes on next start
+          const retries = this.crashRetries.get(jobId) ?? 0;
+          if (isTransientDbError(err) && retries < MAX_CRASH_RETRIES) {
+            // A database blip shouldn't leave a job stuck: try again shortly. Progress is in the DB,
+            // so the job carries on from the last PAN it recorded.
+            this.crashRetries.set(jobId, retries + 1);
+            this.log.warn({ err, jobId, retry: retries + 1 }, "check job hit a database error; retrying");
+            await sleep(CRASH_RETRY_MS);
+            q.unshift(jobId);
+            continue;
+          }
+          this.crashRetries.delete(jobId);
           this.log.error({ err, jobId }, "check job crashed");
           await this.prisma.checkJob
             .update({ where: { id: jobId }, data: { state: "FAILED", error: (err as Error).message, finishedAt: new Date() } })
@@ -113,10 +148,13 @@ export class JobRunner {
     const adapter = this.registry.get(job.ipo.registrar);
     if (!adapter) throw new Error(`No adapter for registrar "${job.ipo.registrar}"`);
 
-    await this.prisma.checkJob.update({
-      where: { id: jobId },
+    // Conditional updates: a cancel can land between our read and this write, and must win.
+    const live = { id: jobId, state: { in: ["QUEUED" as const, "RUNNING" as const] } };
+    const started = await this.prisma.checkJob.updateMany({
+      where: live,
       data: { state: "RUNNING", startedAt: job.startedAt ?? new Date() },
     });
+    if (!started.count) return;
     this.log.info({ jobId, ipo: job.ipo.name, total: job.total, from: job.done }, "check job started");
 
     let { done, failed } = job;
@@ -125,6 +163,7 @@ export class JobRunner {
       if (this.stopping) return; // stays RUNNING → resumed on next start
       if (this.cancelled.has(jobId)) {
         this.cancelled.delete(jobId);
+        await this.prisma.checkJob.updateMany({ where: live, data: { state: "CANCELLED", finishedAt: new Date() } });
         return;
       }
 
@@ -140,8 +179,9 @@ export class JobRunner {
       await this.prisma.checkJob.update({ where: { id: jobId }, data: { done, failed } });
     }
 
-    await this.prisma.checkJob.update({ where: { id: jobId }, data: { state: "DONE", finishedAt: new Date() } });
-    this.log.info({ jobId, done, failed }, "check job finished");
+    const finished = await this.prisma.checkJob.updateMany({ where: live, data: { state: "DONE", finishedAt: new Date() } });
+    this.cancelled.delete(jobId);
+    if (finished.count) this.log.info({ jobId, done, failed }, "check job finished");
   }
 
   private async saveResult(ipoId: number, panId: number, r: CheckResult, attempts: number) {

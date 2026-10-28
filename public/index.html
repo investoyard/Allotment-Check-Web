@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -46,7 +46,7 @@
 <div id="login" class="card hidden">
   <h2 style="margin-top:0">Sign in</h2>
   <form id="loginForm">
-    <input name="email" type="email" placeholder="Email" required autocomplete="username">
+    <input name="email" type="text" placeholder="Username or email" required autocomplete="username">
     <input name="password" type="password" placeholder="Password" required autocomplete="current-password">
     <button class="btn primary" style="width:100%">Sign in</button>
     <p id="loginErr" class="err"></p>
@@ -101,7 +101,7 @@
     <section id="view-ipo" class="hidden">
       <div class="card">
         <div class="row" style="justify-content:space-between">
-          <div><button class="btn" id="backToIpos">‹ IPOs</button> <b id="ipoTitle" style="font-size:16px;margin-left:8px"></b> <span id="ipoSub" class="muted"></span></div>
+          <div><button class="btn" id="backToIpos">â€¹ IPOs</button> <b id="ipoTitle" style="font-size:16px;margin-left:8px"></b> <span id="ipoSub" class="muted"></span></div>
           <div class="row">
             <button class="btn primary" data-scope="unchecked">Check unchecked</button>
             <button class="btn" data-scope="failed">Re-check errors</button>
@@ -112,8 +112,8 @@
         <div class="row" style="margin-top:12px">
           <label class="muted">Allotment date <input type="date" id="ipoAllot"></label>
           <label class="muted">Listing date <input type="date" id="ipoList"></label>
-          <label class="muted">Issue price ₹ <input type="number" id="ipoIssue" min="0" step="0.01" style="width:100px"></label>
-          <label class="muted">Listing price ₹ <input type="number" id="ipoListPrice" min="0" step="0.01" style="width:100px"></label>
+          <label class="muted">Issue price â‚¹ <input type="number" id="ipoIssue" min="0" step="0.01" style="width:100px"></label>
+          <label class="muted">Listing price â‚¹ <input type="number" id="ipoListPrice" min="0" step="0.01" style="width:100px"></label>
           <label class="muted"><input type="checkbox" id="ipoAuto"> Auto-check on allotment day</label>
           <button class="btn" id="ipoSave">Save</button>
           <button class="btn" id="ipoArchive" data-admin-inline>Archive</button>
@@ -138,7 +138,7 @@
         <table><thead><tr><th>PAN</th><th>Holder</th><th>Client</th><th>Status</th><th class="num">Applied</th><th class="num">Allotted</th>
           <th>Category</th><th class="num">Price</th><th class="num">Amt adjusted</th><th>Checked</th></tr></thead>
         <tbody id="resRows"></tbody></table>
-        <div class="pager"><button class="btn" id="resPrev">‹ Prev</button><span id="resPage" class="muted"></span><button class="btn" id="resNext">Next ›</button></div>
+        <div class="pager"><button class="btn" id="resPrev">â€¹ Prev</button><span id="resPage" class="muted"></span><button class="btn" id="resNext">Next â€º</button></div>
       </div>
     </section>
 
@@ -174,7 +174,7 @@
         <div class="muted" id="panCount"></div>
         <table><thead><tr><th>PAN</th><th>Holder</th><th>Client</th><th>Mobile</th><th>DP / Client ID</th><th></th></tr></thead>
         <tbody id="panRows"></tbody></table>
-        <div class="pager"><button class="btn" id="prev">‹ Prev</button><span id="pageInfo" class="muted"></span><button class="btn" id="next">Next ›</button></div>
+        <div class="pager"><button class="btn" id="prev">â€¹ Prev</button><span id="pageInfo" class="muted"></span><button class="btn" id="next">Next â€º</button></div>
       </div>
     </section>
 
@@ -208,14 +208,14 @@
         <h3 style="margin-top:0">Add user</h3>
         <form id="userForm" class="row">
           <input name="name" placeholder="Name" required>
-          <input name="email" type="email" placeholder="Email" required>
+          <input name="email" type="text" placeholder="Username or email" required>
           <input name="password" type="password" placeholder="Password (10+ chars)" minlength="10" required autocomplete="new-password">
           <select name="role"><option>OPERATOR</option><option>ADMIN</option></select>
           <button class="btn primary">Add</button>
           <span id="userMsg"></span>
         </form>
       </div>
-      <div class="card"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div>
     </section>
 
     <section id="view-audit" class="hidden">
@@ -241,7 +241,7 @@ async function api(path, opts = {}) {
 function showLogin() { $("#shell").classList.add("hidden"); $("#login").classList.remove("hidden"); }
 function showShell() {
   $("#login").classList.add("hidden"); $("#shell").classList.remove("hidden");
-  $("#me").textContent = `${me.name} · ${me.role}`;
+  $("#me").textContent = `${me.name} Â· ${me.role}`;
   document.querySelectorAll("[data-admin], [data-admin-inline]").forEach((b) => b.classList.toggle("hidden", me.role !== "ADMIN"));
   show("ipos");
 }
@@ -262,10 +262,10 @@ function download(url) {
 const fullPanParam = (box) => (me.role === "ADMIN" && $(box).checked ? "true" : "false");
 
 // --- Reports ---
-const pct = (r) => (r == null ? "—" : `${(r * 100).toFixed(1)}%`);
-const rupees = (n) => (n ? `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—");
-const gainText = (n) => (n == null ? "—" : `${n < 0 ? "−" : n > 0 ? "+" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`);
-const gainCell = (n, unknown) => `<td class="num${n < 0 ? " err" : ""}" title="${unknown ? `${unknown} allotment(s) have no listing price yet` : ""}">${n || !unknown ? gainText(n) : "—"}${unknown ? "*" : ""}</td>`;
+const pct = (r) => (r == null ? "â€”" : `${(r * 100).toFixed(1)}%`);
+const rupees = (n) => (n ? `â‚¹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "â€”");
+const gainText = (n) => (n == null ? "â€”" : `${n < 0 ? "âˆ’" : n > 0 ? "+" : ""}â‚¹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`);
+const gainCell = (n, unknown) => `<td class="num${n < 0 ? " err" : ""}" title="${unknown ? `${unknown} allotment(s) have no listing price yet` : ""}">${n || !unknown ? gainText(n) : "â€”"}${unknown ? "*" : ""}</td>`;
 async function fillReportFilters() {
   if ($("#repClient").dataset.loaded) return;
   if (!registrars.length) ({ registrars } = await api("/api/registrars"));
@@ -290,7 +290,7 @@ async function loadReport() {
     ["Allotment ratio", pct(t.ratio)], ["Shares allotted", fmtNum(t.sharesAllotted)], ["Allotted value", rupees(t.allottedValue)],
     ["Listing gain" + (t.gainUnknown ? "*" : ""), gainText(t.listingGain)]]
     .map(([k, v]) => `<div><b>${v}</b><span class="muted">${k}</span></div>`).join("")
-    + (t.gainUnknown ? `<div class="muted" style="align-self:end">* ${t.gainUnknown} allotment(s) not counted — enter the IPO's listing price</div>` : "");
+    + (t.gainUnknown ? `<div class="muted" style="align-self:end">* ${t.gainUnknown} allotment(s) not counted â€” enter the IPO's listing price</div>` : "");
   const byPan = groupBy === "pan";
   $("#repHead").innerHTML = `<tr>${byPan ? "<th>Holder</th><th>PAN</th><th>Client</th>" : "<th>Client</th>"}
     <th class="num">IPOs applied</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Ratio</th>
@@ -314,7 +314,7 @@ const fmtNum = (n) => (n == null ? "" : Number(n).toLocaleString("en-IN"));
 let registrars = [], pollTimer, currentIpo = null, resPage = 1;
 const jobActive = (j) => j && (j.state === "QUEUED" || j.state === "RUNNING");
 const jobText = (j) => !j ? "Never" : ({ auto: "Auto: ", import: "After import: " }[j.trigger] ?? "") + (jobActive(j) ? `${j.state === "QUEUED" ? "Queued" : "Running"} ${j.done}/${j.total}`
-  : `${j.state === "DONE" ? "Done" : j.state.toLowerCase()} · ${fmtDate(j.finishedAt || j.createdAt)}`);
+  : `${j.state === "DONE" ? "Done" : j.state.toLowerCase()} Â· ${fmtDate(j.finishedAt || j.createdAt)}`);
 const dateOnly = (d) => (d ? String(d).slice(0, 10) : "");
 const fmtDay = (d) => (d ? new Date(`${dateOnly(d)}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "");
 
@@ -324,8 +324,8 @@ async function loadToday() {
   $("#todayCard").classList.toggle("hidden", !s.ipos.length);
   if (!s.ipos.length) return;
   $("#schedInfo").textContent = !s.enabled ? "Scheduler is off (SCHEDULER_ENABLED=false)"
-    : `Auto-checks every ${s.everyMin} min, ${s.hours.start}:00–${s.hours.end}:00 IST${s.hours.insideNow ? "" : " (outside hours now)"}`
-      + (s.lastTickAt ? ` · last run ${fmtDate(s.lastTickAt)}` : "");
+    : `Auto-checks every ${s.everyMin} min, ${s.hours.start}:00â€“${s.hours.end}:00 IST${s.hours.insideNow ? "" : " (outside hours now)"}`
+      + (s.lastTickAt ? ` Â· last run ${fmtDate(s.lastTickAt)}` : "");
   $("#todayRows").innerHTML = s.ipos.map((i) => {
     const d = i.lastAction?.action === "wait" || !i.lastAction ? i.next : i.lastAction;
     return `<tr><td><a class="link" data-open="${i.ipoId}">${esc(i.name)}</a></td><td class="muted">${fmtDay(i.allotmentDate)}</td>
@@ -381,7 +381,7 @@ $("#calRows").addEventListener("click", (e) => { if (e.target.dataset.open) open
 
 let liveData = null;
 async function loadLive(refresh) {
-  $("#liveMsg").textContent = "Asking registrars…"; $("#liveMsg").className = "muted";
+  $("#liveMsg").textContent = "Asking registrarsâ€¦"; $("#liveMsg").className = "muted";
   try {
     liveData = await api(`/api/registrars/live${refresh ? "?refresh=true" : ""}`);
     renderLive();
@@ -391,13 +391,13 @@ async function loadLive(refresh) {
 function renderLive() {
   const { registrars: regs, ipos } = liveData;
   const failed = regs.filter((r) => r.error);
-  $("#liveMsg").innerHTML = regs.map((r) => `${esc(r.name)}: ${r.error ? '<span class="err">no response</span>' : r.count}`).join(" · ");
+  $("#liveMsg").innerHTML = regs.map((r) => `${esc(r.name)}: ${r.error ? '<span class="err">no response</span>' : r.count}`).join(" Â· ");
   const rows = ipos.filter((i) => !$("#untrackedOnly").checked || !i.trackedIpoId);
   $("#liveRows").innerHTML = rows.map((i) => `<tr><td class="muted">${esc(i.registrarName)}</td><td>${esc(i.name)}${i.isSme ? ' <span class="tag">SME</span>' : ""}</td>
-    <td>${i.trackedIpoId ? (i.allotmentDate ? fmtDay(i.allotmentDate) : "—") : '<input type="date" class="liveDate">'}</td>
-    <td>${i.trackedIpoId ? `<a class="link" data-open-live="${i.trackedIpoId}">Tracked ✓</a>`
+    <td>${i.trackedIpoId ? (i.allotmentDate ? fmtDay(i.allotmentDate) : "â€”") : '<input type="date" class="liveDate">'}</td>
+    <td>${i.trackedIpoId ? `<a class="link" data-open-live="${i.trackedIpoId}">Tracked âœ“</a>`
       : `<button class="btn" data-track='${esc(JSON.stringify({ registrar: i.registrar, registrarIpoId: i.registrarIpoId, name: i.name, isSme: i.isSme }))}'>Track</button>`}</td></tr>`).join("")
-    || `<tr><td colspan="4" class="muted">${ipos.length ? "All live IPOs are already tracked." : "No IPOs listed right now."}${failed.length ? " Some registrars didn't respond — try Refresh." : ""}</td></tr>`;
+    || `<tr><td colspan="4" class="muted">${ipos.length ? "All live IPOs are already tracked." : "No IPOs listed right now."}${failed.length ? " Some registrars didn't respond â€” try Refresh." : ""}</td></tr>`;
 }
 $("#loadLive").addEventListener("click", () => loadLive(false));
 $("#refreshLive").addEventListener("click", () => loadLive(true));
@@ -421,7 +421,7 @@ $("#liveRows").addEventListener("click", async (e) => {
 async function loadIpo() {
   const { ipo } = await api(`/api/ipos/${currentIpo}`);
   $("#ipoTitle").textContent = ipo.name;
-  $("#ipoSub").textContent = `${registrars.find((r) => r.id === ipo.registrar)?.name ?? ipo.registrar} · ID ${ipo.registrarIpoId}`;
+  $("#ipoSub").textContent = `${registrars.find((r) => r.id === ipo.registrar)?.name ?? ipo.registrar} Â· ID ${ipo.registrarIpoId}`;
   // Don't overwrite fields the user is editing while a job refresh polls.
   if (!$("#ipoSave").dataset.dirty) {
     $("#ipoAllot").value = dateOnly(ipo.allotmentDate);
@@ -443,11 +443,11 @@ async function loadIpo() {
   $("#jobBox").classList.toggle("hidden", !active);
   if (active) {
     $("#ipoMsg").textContent = "";
-    $("#jobText").textContent = `${jobText(j)}${j.failed ? ` · ${j.failed} errors` : ""}`;
+    $("#jobText").textContent = `${jobText(j)}${j.failed ? ` Â· ${j.failed} errors` : ""}`;
     $("#jobBar").style.width = `${Math.round((100 * j.done) / j.total)}%`;
     $("#cancelJob").dataset.job = j.id;
   } else if (j) {
-    $("#ipoMsg").textContent = `Last check: ${jobText(j)} (${j.done}/${j.total}${j.failed ? `, ${j.failed} errors` : ""})${j.error ? ` — ${j.error}` : ""}`;
+    $("#ipoMsg").textContent = `Last check: ${jobText(j)} (${j.done}/${j.total}${j.failed ? `, ${j.failed} errors` : ""})${j.error ? ` â€” ${j.error}` : ""}`;
     $("#ipoMsg").className = "muted";
   }
 
@@ -467,7 +467,7 @@ async function loadResults() {
   if ($("#resQ").value.trim()) p.set("q", $("#resQ").value.trim());
   const { total, rows, pageSize } = await api(`/api/ipos/${currentIpo}/results?${p}`);
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  $("#resPage").textContent = `${total} PANs · page ${resPage} of ${pages}`;
+  $("#resPage").textContent = `${total} PANs Â· page ${resPage} of ${pages}`;
   $("#resPrev").disabled = resPage <= 1; $("#resNext").disabled = resPage >= pages;
   $("#resRows").innerHTML = rows.map(({ result: r, ...p }) => {
     const st = r ? r.status : "PENDING";
@@ -557,7 +557,7 @@ async function loadPans() {
     <td>${esc(x.mobile)}</td><td class="mono">${esc(x.dpClientId)}</td>
     <td>${admin ? `<button class="btn" data-reveal="${x.id}">Reveal</button>
       <button class="btn" data-toggle="${x.id}" data-active="${x.active}">${x.active ? "Deactivate" : "Activate"}</button>` : ""}</td></tr>`).join("")
-    || `<tr><td colspan="6" class="muted">No PANs yet${admin ? " — use Import to add them." : "."}</td></tr>`;
+    || `<tr><td colspan="6" class="muted">No PANs yet${admin ? " â€” use Import to add them." : "."}</td></tr>`;
 }
 let qTimer;
 $("#q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { page = 1; loadPans(); }, 300); });
@@ -583,14 +583,14 @@ async function loadImportIpos() {
   const { ipos } = await api("/api/ipos");
   $("#importIpoList").innerHTML = ipos.map((i) => `<label><input type="checkbox" class="importIpo" value="${i.id}" checked>
     ${esc(i.name)}${i.allotmentDate ? ` <span class="muted">(${fmtDay(i.allotmentDate)})</span>` : ""}</label>`).join("")
-    || `<span class="muted">No IPOs tracked yet — track IPOs on the IPOs page first, then new uploads are checked automatically.</span>`;
+    || `<span class="muted">No IPOs tracked yet â€” track IPOs on the IPOs page first, then new uploads are checked automatically.</span>`;
 }
 
 async function runImport(dryRun) {
   const file = $("#file").files[0];
   if (!file) { $("#importMsg").textContent = "Choose a file first."; return; }
   const fd = new FormData(); fd.append("file", file);
-  $("#importMsg").textContent = dryRun ? "Checking file…" : "Importing…";
+  $("#importMsg").textContent = dryRun ? "Checking fileâ€¦" : "Importingâ€¦";
   $("#importMsg").className = "";
   try {
     const qs = new URLSearchParams({ dryRun, skipErrors: $("#skipErrors").checked });
@@ -599,12 +599,12 @@ async function runImport(dryRun) {
     const { plan, checks } = await api(`/api/pans/import?${qs}`, { method: "POST", body: fd });
     renderPlan(plan);
     $("#importChecks").innerHTML = (checks || []).length
-      ? `<b>Checks started:</b><ul>${checks.map((c) => `<li><a class="link" data-open="${c.ipoId}">${esc(c.name)}</a> — ${
+      ? `<b>Checks started:</b><ul>${checks.map((c) => `<li><a class="link" data-open="${c.ipoId}">${esc(c.name)}</a> â€” ${
           c.jobId ? `${c.total} PAN${c.total === 1 ? "" : "s"} queued` : "nothing new to check"}</li>`).join("")}</ul>
          <p class="muted">Checks run in the background. Open an IPO to watch progress.</p>`
       : "";
     if (dryRun) {
-      $("#importMsg").textContent = "Preview ready — nothing saved yet.";
+      $("#importMsg").textContent = "Preview ready â€” nothing saved yet.";
       $("#commit").disabled = plan.summary.create + plan.summary.update === 0;
     } else {
       $("#importMsg").textContent = `Imported: ${plan.summary.create} added, ${plan.summary.update} updated.`;
@@ -654,7 +654,7 @@ $("#userForm").addEventListener("submit", async (e) => {
 async function loadAudit() {
   const { logs } = await api("/api/audit?limit=200");
   $("#auditRows").innerHTML = logs.map((l) => `<tr><td class="muted">${new Date(l.createdAt).toLocaleString()}</td>
-    <td>${esc(l.user?.name ?? "—")}</td><td class="mono">${esc(l.action)}</td>
+    <td>${esc(l.user?.name ?? "â€”")}</td><td class="mono">${esc(l.action)}</td>
     <td class="muted mono">${esc(l.details ? JSON.stringify(l.details) : "")}</td><td class="muted">${esc(l.ip)}</td></tr>`).join("");
 }
 

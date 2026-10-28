@@ -4,7 +4,8 @@ import { COOKIE_NAME, SESSION_HOURS, publicUser, requireLogin } from "../auth.js
 import { audit } from "../audit.js";
 import { verifyPassword } from "../lib/crypto.js";
 
-const loginBody = z.object({ email: z.string().trim().toLowerCase().email(), password: z.string().min(1) });
+// "email" holds the login name: a username (e.g. "superadmin") or an email address. Case-insensitive.
+const loginBody = z.object({ email: z.string().trim().toLowerCase().min(1).max(100), password: z.string().min(1) });
 
 // Simple in-memory brute-force guard: 5 failures per IP+email per 15 minutes.
 const MAX_FAILS = 5;
