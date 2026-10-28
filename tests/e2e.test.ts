@@ -314,6 +314,40 @@ describe.runIf(run)("end to end", () => {
     expect(live.ipos.find((i: { registrar: string }) => i.registrar === "late").trackedIpoId).toBeNull();
   });
 
+  it("uploading new PANs checks them straight away for the chosen IPOs", async () => {
+    const csv = ["PAN,Name,Client", "AAAPD0001D,New Holder,Family C", "AAAPE0002E,Other New,Family C"].join("\n");
+    const res = await app.inject({ method: "POST", url: `/api/pans/import?dryRun=false&checkIpoIds=${ipoId}`, ...as("admin"), ...multipart("new.csv", csv) });
+    expect(res.statusCode).toBe(200);
+    const [c] = res.json().checks;
+    // Only the 2 new PANs — the 3 existing ones already have results for this IPO.
+    expect(c).toMatchObject({ ipoId, total: 2 });
+    const job = await prisma.checkJob.findUniqueOrThrow({ where: { id: c.jobId } });
+    expect(job.trigger).toBe("import");
+    await waitForJobs(ipoId);
+    const newPan = await prisma.pan.findFirstOrThrow({ where: { holderName: "New Holder" } });
+    expect((await prisma.checkResult.findUniqueOrThrow({ where: { ipoId_panId: { ipoId, panId: newPan.id } } })).status).toBe("ALLOTTED");
+
+    // Dry runs never start checks; a re-upload of the same file finds nothing new.
+    const dry = await app.inject({ method: "POST", url: `/api/pans/import?dryRun=true&checkIpoIds=${ipoId}`, ...as("admin"), ...multipart("new.csv", csv) });
+    expect(dry.json().checks).toEqual([]);
+    const again = await app.inject({ method: "POST", url: `/api/pans/import?dryRun=false&checkIpoIds=${ipoId}`, ...as("admin"), ...multipart("new.csv", csv) });
+    expect(again.json().checks[0]).toMatchObject({ jobId: null, total: 0 });
+  });
+
+  it("queues new PANs behind a check that is already running", async () => {
+    // Hold a fake running job for this IPO covering the existing PANs.
+    const all = await prisma.pan.findMany({ select: { id: true } });
+    const running = await prisma.checkJob.create({ data: { ipoId, scope: "all", panIds: all.map((p) => p.id), total: all.length, state: "RUNNING" } });
+    const csv = ["PAN,Name,Client", "AAAPF0003F,Third New,Family C"].join("\n");
+    const res = await app.inject({ method: "POST", url: `/api/pans/import?dryRun=false&checkIpoIds=${ipoId}`, ...as("admin"), ...multipart("more.csv", csv) });
+    const [c] = res.json().checks;
+    expect(c.total).toBe(1);
+    const followUp = await prisma.checkJob.findUniqueOrThrow({ where: { id: c.jobId } });
+    expect(followUp.panIds).toHaveLength(1);
+    await prisma.checkJob.update({ where: { id: running.id }, data: { state: "DONE" } });
+    await app.runner.cancel(followUp.id);
+  });
+
   it("only admins can trigger the scheduler manually", async () => {
     expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("operator") })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("admin") })).statusCode).toBe(200);

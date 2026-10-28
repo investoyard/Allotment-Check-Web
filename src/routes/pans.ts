@@ -5,6 +5,7 @@ import { requireAdmin, requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { parseRows, readSheet } from "../lib/import.js";
 import { isValidPan, normalizePan } from "../lib/pan.js";
+import { createCheckJob } from "../services/checkJobs.js";
 import { applyImport, planImport } from "../services/panImport.js";
 
 const listQuery = z.object({
@@ -40,6 +41,12 @@ const idParam = z.object({ id: z.coerce.number().int().positive() });
 const importQuery = z.object({
   dryRun: z.enum(["true", "false"]).default("true"),
   skipErrors: z.enum(["true", "false"]).default("false"),
+  /** Comma-separated IPO ids to check the imported PANs for, right after the import. */
+  checkIpoIds: z
+    .string()
+    .optional()
+    .transform((s) => (s ? [...new Set(s.split(",").map((x) => Number(x.trim())))] : []))
+    .pipe(z.array(z.number().int().positive()).max(50)),
 });
 
 const panSelect = {
@@ -134,7 +141,7 @@ export async function panRoutes(app: FastifyInstance) {
    * Required columns: PAN, Name. Optional: Client/Group, Mobile, DP ID.
    */
   app.post("/import", { preHandler: requireAdmin }, async (req, reply) => {
-    const { dryRun, skipErrors } = importQuery.parse(req.query);
+    const { dryRun, skipErrors, checkIpoIds } = importQuery.parse(req.query);
     const file = await req.file();
     if (!file) return reply.code(400).send({ error: "No file uploaded" });
     const buffer = await file.toBuffer();
@@ -154,7 +161,22 @@ export async function panRoutes(app: FastifyInstance) {
       }
       await applyImport(app.prisma, rows, plan, sealed);
       await audit(req, "pan.import", { details: { file: file.filename, ...plan.summary } });
+
+      // Check the new PANs right away for the chosen IPOs. "unchecked" picks up exactly the
+      // PANs with no result for that IPO yet, which includes everything just imported.
+      const checks = [];
+      const ipos = await app.prisma.ipo.findMany({ where: { id: { in: checkIpoIds }, archived: false } });
+      for (const ipo of ipos) {
+        const r = await createCheckJob(app.prisma, app.runner, ipo, "unchecked", {
+          userId: req.currentUser!.id,
+          trigger: "import",
+          queueBehindActive: true,
+        });
+        checks.push({ ipoId: ipo.id, name: ipo.name, jobId: r.ok ? r.job.id : null, total: r.ok ? r.job.total : 0 });
+        if (r.ok) await audit(req, "ipo.check", { entity: "Ipo", entityId: ipo.id, details: { jobId: r.job.id, scope: "unchecked", total: r.job.total, trigger: "import" } });
+      }
+      return { dryRun: false, plan, checks };
     }
-    return { dryRun: dryRun === "true", plan };
+    return { dryRun: true, plan, checks: [] };
   });
 }

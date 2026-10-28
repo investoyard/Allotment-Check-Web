@@ -183,6 +183,10 @@
         <h3 style="margin-top:0">Import PANs from Excel / CSV</h3>
         <p class="muted">Required columns: <b>PAN</b>, <b>Name</b>. Optional: <b>Client</b> (or Group / Family), <b>Mobile</b>, <b>DP ID</b>.
           Without a Client column, each holder becomes their own client. Existing PANs are updated, not duplicated.</p>
+        <div id="importIpos" style="margin:10px 0">
+          <b>After import, check the new PANs for:</b>
+          <div id="importIpoList" class="row" style="margin-top:6px"></div>
+        </div>
         <div class="row">
           <input type="file" id="file" accept=".xlsx,.csv">
           <button class="btn" id="preview">Preview</button>
@@ -190,6 +194,7 @@
           <label class="muted hidden" id="skipWrap"><input type="checkbox" id="skipErrors"> Skip rows with errors</label>
         </div>
         <p id="importMsg"></p>
+        <div id="importChecks"></div>
       </div>
       <div id="importResult" class="hidden">
         <div class="card stats" id="importStats"></div>
@@ -246,7 +251,7 @@ function show(view) {
   const navView = view === "ipo" ? "ipos" : view;
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === navView));
   document.querySelectorAll("main > section").forEach((s) => s.classList.toggle("hidden", s.id !== `view-${view}`));
-  ({ ipos: loadIpos, ipo: loadIpo, reports: loadReport, pans: loadPans, users: loadUsers, audit: loadAudit, import: () => {} })[view]();
+  ({ ipos: loadIpos, ipo: loadIpo, reports: loadReport, pans: loadPans, users: loadUsers, audit: loadAudit, import: loadImportIpos })[view]();
 }
 
 /** Starts a file download from a GET endpoint (same-origin, so the session cookie goes along). */
@@ -308,7 +313,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleString([], { dateStyle: "medium"
 const fmtNum = (n) => (n == null ? "" : Number(n).toLocaleString("en-IN"));
 let registrars = [], pollTimer, currentIpo = null, resPage = 1;
 const jobActive = (j) => j && (j.state === "QUEUED" || j.state === "RUNNING");
-const jobText = (j) => !j ? "Never" : (j.trigger === "auto" ? "Auto: " : "") + (jobActive(j) ? `${j.state === "QUEUED" ? "Queued" : "Running"} ${j.done}/${j.total}`
+const jobText = (j) => !j ? "Never" : ({ auto: "Auto: ", import: "After import: " }[j.trigger] ?? "") + (jobActive(j) ? `${j.state === "QUEUED" ? "Queued" : "Running"} ${j.done}/${j.total}`
   : `${j.state === "DONE" ? "Done" : j.state.toLowerCase()} · ${fmtDate(j.finishedAt || j.createdAt)}`);
 const dateOnly = (d) => (d ? String(d).slice(0, 10) : "");
 const fmtDay = (d) => (d ? new Date(`${dateOnly(d)}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "");
@@ -574,6 +579,13 @@ $("#panRows").addEventListener("click", async (e) => {
 });
 
 // --- Import ---
+async function loadImportIpos() {
+  const { ipos } = await api("/api/ipos");
+  $("#importIpoList").innerHTML = ipos.map((i) => `<label><input type="checkbox" class="importIpo" value="${i.id}" checked>
+    ${esc(i.name)}${i.allotmentDate ? ` <span class="muted">(${fmtDay(i.allotmentDate)})</span>` : ""}</label>`).join("")
+    || `<span class="muted">No IPOs tracked yet — track IPOs on the IPOs page first, then new uploads are checked automatically.</span>`;
+}
+
 async function runImport(dryRun) {
   const file = $("#file").files[0];
   if (!file) { $("#importMsg").textContent = "Choose a file first."; return; }
@@ -582,8 +594,15 @@ async function runImport(dryRun) {
   $("#importMsg").className = "";
   try {
     const qs = new URLSearchParams({ dryRun, skipErrors: $("#skipErrors").checked });
-    const { plan } = await api(`/api/pans/import?${qs}`, { method: "POST", body: fd });
+    const ipoIds = [...document.querySelectorAll(".importIpo:checked")].map((c) => c.value);
+    if (!dryRun && ipoIds.length) qs.set("checkIpoIds", ipoIds.join(","));
+    const { plan, checks } = await api(`/api/pans/import?${qs}`, { method: "POST", body: fd });
     renderPlan(plan);
+    $("#importChecks").innerHTML = (checks || []).length
+      ? `<b>Checks started:</b><ul>${checks.map((c) => `<li><a class="link" data-open="${c.ipoId}">${esc(c.name)}</a> — ${
+          c.jobId ? `${c.total} PAN${c.total === 1 ? "" : "s"} queued` : "nothing new to check"}</li>`).join("")}</ul>
+         <p class="muted">Checks run in the background. Open an IPO to watch progress.</p>`
+      : "";
     if (dryRun) {
       $("#importMsg").textContent = "Preview ready — nothing saved yet.";
       $("#commit").disabled = plan.summary.create + plan.summary.update === 0;
@@ -607,9 +626,10 @@ function renderPlan(plan) {
   $("#importRows").innerHTML = plan.rows.map((r) => `<tr><td>${r.rowNumber}</td><td><span class="tag ${r.action}">${r.action}</span></td>
     <td class="mono">${esc(r.panMasked)}</td><td>${esc(r.holderName)}</td><td>${esc(r.clientName)}</td><td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("");
 }
+$("#importChecks").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
 $("#preview").addEventListener("click", () => runImport(true));
 $("#commit").addEventListener("click", () => runImport(false));
-$("#file").addEventListener("change", () => { $("#commit").disabled = true; $("#importResult").classList.add("hidden"); $("#importMsg").textContent = ""; });
+$("#file").addEventListener("change", () => { $("#commit").disabled = true; $("#importResult").classList.add("hidden"); $("#importMsg").textContent = ""; $("#importChecks").innerHTML = ""; });
 $("#skipErrors").addEventListener("change", () => { $("#commit").disabled = false; });
 
 // --- Users ---
