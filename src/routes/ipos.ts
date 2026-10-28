@@ -5,9 +5,12 @@ import { requireAdmin, requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { CHECK_SCOPES, createCheckJob } from "../services/checkJobs.js";
 import { ipoWorkbook, type IpoExportRow } from "../services/excel.js";
+import { listingGain } from "../services/reports.js";
+import type { IpoRef } from "../registrars/types.js";
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 const dateField = z.iso.date().nullable().optional();
+const priceField = z.number().positive().max(1e7).nullable().optional();
 
 const createBody = z.object({
   registrar: z.string().min(1),
@@ -16,12 +19,15 @@ const createBody = z.object({
   isSme: z.boolean().optional(),
   allotmentDate: dateField,
   listingDate: dateField,
+  issuePrice: priceField,
 });
 
 const updateBody = z.object({
   name: z.string().trim().min(1).optional(),
   allotmentDate: dateField,
   listingDate: dateField,
+  issuePrice: priceField,
+  listingPrice: priceField,
   autoCheck: z.boolean().optional(),
   archived: z.boolean().optional(),
 });
@@ -73,6 +79,22 @@ export async function ipoRoutes(app: FastifyInstance) {
   }
 
   const latestJob = (ipoId: number) => app.prisma.checkJob.findFirst({ where: { ipoId }, orderBy: { id: "desc" } });
+  const num = (d: { toString(): string } | null | undefined) => (d == null ? null : Number(d));
+
+  /** Total listing gain across allotted, active PANs; null until a listing price is entered. */
+  async function ipoListingGain(ipo: { id: number; issuePrice: unknown; listingPrice: unknown }) {
+    if (ipo.listingPrice == null) return null;
+    const allotted = await app.prisma.checkResult.findMany({
+      where: { ipoId: ipo.id, status: "ALLOTTED", pan: { active: true } },
+      select: { allottedQty: true, price: true },
+    });
+    let total = 0;
+    for (const r of allotted) {
+      const g = listingGain({ status: "ALLOTTED", allottedQty: r.allottedQty, price: num(r.price), issuePrice: num(ipo.issuePrice as never), listingPrice: num(ipo.listingPrice as never) });
+      total += g ?? 0;
+    }
+    return Math.round(total * 100) / 100;
+  }
 
   app.get("/", async (req) => {
     const { archived } = z.object({ archived: z.enum(["true", "false"]).default("false") }).parse(req.query);
@@ -87,7 +109,7 @@ export async function ipoRoutes(app: FastifyInstance) {
     const { id } = idParam.parse(req.params);
     const ipo = await app.prisma.ipo.findUnique({ where: { id } });
     if (!ipo) return reply.code(404).send({ error: "IPO not found" });
-    return { ipo: { ...ipo, counts: await counts(id), job: await latestJob(id) } };
+    return { ipo: { ...ipo, counts: await counts(id), job: await latestJob(id), listingGain: await ipoListingGain(ipo) } };
   });
 
   app.post("/", async (req, reply) => {
@@ -200,14 +222,22 @@ export async function ipoRoutes(app: FastifyInstance) {
         appliedQty: r?.appliedQty ?? null,
         allottedQty: r?.allottedQty ?? null,
         category: r?.category ?? null,
-        price: r?.price == null ? null : Number(r.price),
-        amountAdjusted: r?.amountAdjusted == null ? null : Number(r.amountAdjusted),
+        price: num(r?.price),
+        amountAdjusted: num(r?.amountAdjusted),
         checkedAt: r?.checkedAt ?? null,
         message: r?.message ?? null,
+        listingGain: r
+          ? listingGain({ status: r.status, allottedQty: r.allottedQty, price: num(r.price), issuePrice: num(ipo.issuePrice), listingPrice: num(ipo.listingPrice) })
+          : null,
       };
     });
 
-    const buf = await ipoWorkbook(ipo, app.registry.get(ipo.registrar)?.name ?? ipo.registrar, await counts(id), rows);
+    const buf = await ipoWorkbook(
+      { ...ipo, issuePrice: num(ipo.issuePrice), listingPrice: num(ipo.listingPrice) },
+      app.registry.get(ipo.registrar)?.name ?? ipo.registrar,
+      await counts(id),
+      rows,
+    );
     await audit(req, "export.ipo", { entity: "Ipo", entityId: id, details: { rows: rows.length, fullPan: fullPan === "true", ...filters } });
     return sendXlsx(reply, `${ipo.name} allotment`, buf);
   });
@@ -251,6 +281,42 @@ export async function registrarRoutes(app: FastifyInstance) {
   app.get("/", async () => ({
     registrars: [...app.registry.values()].map((r) => ({ id: r.id, name: r.name })),
   }));
+
+  // Registrar IPO lists change a few times a day; cache them so page loads don't hit the sites.
+  const LIVE_TTL_MS = 10 * 60_000;
+  const liveCache = new Map<string, { at: number; ipos: IpoRef[] }>();
+
+  /** IPOs open for status check at every registrar, flagged if tracked. One failing site doesn't fail the rest. */
+  app.get("/live", async (req) => {
+    const { refresh } = z.object({ refresh: z.enum(["true", "false"]).default("false") }).parse(req.query);
+    const adapters = [...app.registry.values()];
+    const results = await Promise.all(
+      adapters.map(async (a) => {
+        const hit = liveCache.get(a.id);
+        if (hit && refresh !== "true" && Date.now() - hit.at < LIVE_TTL_MS) return { registrar: a, ipos: hit.ipos, error: null, fetchedAt: hit.at };
+        try {
+          const ipos = await a.listIpos();
+          liveCache.set(a.id, { at: Date.now(), ipos });
+          return { registrar: a, ipos, error: null, fetchedAt: Date.now() };
+        } catch (err) {
+          req.log.warn({ err, registrar: a.id }, "registrar IPO list failed");
+          return { registrar: a, ipos: [] as IpoRef[], error: `${a.name} didn't respond`, fetchedAt: null };
+        }
+      }),
+    );
+    const tracked = await app.prisma.ipo.findMany({ select: { id: true, registrar: true, registrarIpoId: true, allotmentDate: true } });
+    const key = (r: string, id: string) => `${r}|${id}`;
+    const trackedBy = new Map(tracked.map((t) => [key(t.registrar, t.registrarIpoId), t]));
+    return {
+      registrars: results.map((r) => ({ id: r.registrar.id, name: r.registrar.name, count: r.ipos.length, error: r.error, fetchedAt: r.fetchedAt })),
+      ipos: results.flatMap((r) =>
+        r.ipos.map((i) => {
+          const t = trackedBy.get(key(r.registrar.id, i.registrarIpoId));
+          return { ...i, registrar: r.registrar.id, registrarName: r.registrar.name, trackedIpoId: t?.id ?? null, allotmentDate: t?.allotmentDate ?? null };
+        }),
+      ),
+    };
+  });
 
   /** IPOs the registrar currently lists for status checks, flagged if already tracked here. */
   app.get("/:id/ipos", async (req, reply) => {

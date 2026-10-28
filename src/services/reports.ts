@@ -28,7 +28,22 @@ export interface HistoryRow {
   price: number | null;
   amountAdjusted: number | null;
   checkedAt: Date;
+  /** From the IPO record, entered by staff */
+  issuePrice: number | null;
+  listingPrice: number | null;
 }
+
+/** Price paid per share: the IPO's issue price if set, else what the registrar reported. */
+export const effectivePrice = (r: Pick<HistoryRow, "issuePrice" | "price">) => r.issuePrice ?? r.price;
+
+/** Listing-day gain for an allotted result, or null when a price is missing. */
+export function listingGain(r: Pick<HistoryRow, "status" | "allottedQty" | "issuePrice" | "price" | "listingPrice">): number | null {
+  const paid = effectivePrice(r);
+  if (r.status !== "ALLOTTED" || !r.allottedQty || paid == null || r.listingPrice == null) return null;
+  return Math.round((r.listingPrice - paid) * r.allottedQty * 100) / 100;
+}
+
+const num = (d: { toString(): string } | null) => (d == null ? null : Number(d));
 
 export interface Tally {
   key: number;
@@ -44,8 +59,12 @@ export interface Tally {
   ratio: number | null;
   sharesApplied: number;
   sharesAllotted: number;
-  /** Shares allotted × issue price, where the registrar gave a price */
+  /** Shares allotted × issue price, where a price is known */
   allottedValue: number;
+  /** Sum of listing-day gain/loss over allotments with both prices known */
+  listingGain: number;
+  /** Allotments missing a listing or issue price (not in listingGain) */
+  gainUnknown: number;
   errors: number;
 }
 
@@ -71,7 +90,7 @@ export async function loadHistory(prisma: PrismaClient, f: ReportFilters): Promi
   const results = await prisma.checkResult.findMany({
     where: resultWhere(f),
     include: {
-      ipo: { select: { name: true, registrar: true, isSme: true, allotmentDate: true, createdAt: true } },
+      ipo: { select: { name: true, registrar: true, isSme: true, allotmentDate: true, createdAt: true, issuePrice: true, listingPrice: true } },
       pan: { select: { panMasked: true, panEncrypted: true, holderName: true, clientId: true, client: { select: { name: true } } } },
     },
     orderBy: [{ ipoId: "desc" }, { panId: "asc" }],
@@ -92,9 +111,11 @@ export async function loadHistory(prisma: PrismaClient, f: ReportFilters): Promi
     appliedQty: r.appliedQty,
     allottedQty: r.allottedQty,
     category: r.category,
-    price: r.price == null ? null : Number(r.price),
-    amountAdjusted: r.amountAdjusted == null ? null : Number(r.amountAdjusted),
+    price: num(r.price),
+    amountAdjusted: num(r.amountAdjusted),
     checkedAt: r.checkedAt,
+    issuePrice: num(r.ipo.issuePrice),
+    listingPrice: num(r.ipo.listingPrice),
   }));
 }
 
@@ -110,7 +131,8 @@ export function tally(rows: HistoryRow[], by: "client" | "pan"): Tally[] {
         label: by === "client" ? r.clientName : r.holderName,
         clientName: r.clientName,
         ...(by === "pan" ? { panMasked: r.panMasked, panEncrypted: r.panEncrypted } : {}),
-        applied: 0, allotted: 0, notAllotted: 0, ratio: null, sharesApplied: 0, sharesAllotted: 0, allottedValue: 0, errors: 0,
+        applied: 0, allotted: 0, notAllotted: 0, ratio: null, sharesApplied: 0, sharesAllotted: 0, allottedValue: 0,
+        listingGain: 0, gainUnknown: 0, errors: 0,
       };
       map.set(key, t);
     }
@@ -121,7 +143,13 @@ export function tally(rows: HistoryRow[], by: "client" | "pan"): Tally[] {
     else t.notAllotted++;
     t.sharesApplied += r.appliedQty ?? 0;
     t.sharesAllotted += r.allottedQty ?? 0;
-    if (r.price != null && r.allottedQty) t.allottedValue += r.price * r.allottedQty;
+    const paid = effectivePrice(r);
+    if (paid != null && r.allottedQty) t.allottedValue += paid * r.allottedQty;
+    if (r.status === "ALLOTTED") {
+      const g = listingGain(r);
+      if (g == null) t.gainUnknown++;
+      else t.listingGain += g;
+    }
   }
   const out = [...map.values()];
   for (const t of out) t.ratio = t.applied ? t.allotted / t.applied : null;
@@ -138,6 +166,8 @@ export function totals(rows: HistoryRow[]) {
     allotted: allotted.length,
     ratio: applied.length ? allotted.length / applied.length : null,
     sharesAllotted: allotted.reduce((t, r) => t + (r.allottedQty ?? 0), 0),
-    allottedValue: allotted.reduce((t, r) => t + (r.price ?? 0) * (r.allottedQty ?? 0), 0),
+    allottedValue: allotted.reduce((t, r) => t + (effectivePrice(r) ?? 0) * (r.allottedQty ?? 0), 0),
+    listingGain: Math.round(allotted.reduce((t, r) => t + (listingGain(r) ?? 0), 0) * 100) / 100,
+    gainUnknown: allotted.filter((r) => listingGain(r) == null).length,
   };
 }

@@ -66,6 +66,10 @@ model Ipo {
   isSme          Boolean       @default(false)
   allotmentDate  DateTime?     @db.Date
   listingDate    DateTime?     @db.Date
+  /// Issue (offer) price per share. Falls back to the registrar's price on each result.
+  issuePrice     Decimal?      @db.Decimal(12, 2)
+  /// Price on listing day, used for listing gain/loss
+  listingPrice   Decimal?      @db.Decimal(12, 2)
   /// Let the scheduler check this IPO automatically around its allotment date
   autoCheck      Boolean       @default(true)
   /// Last time the scheduler probed a sample of PANs while waiting for the registrar to publish

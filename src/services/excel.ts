@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import type { HistoryRow, Tally } from "./reports.js";
+import { listingGain, type HistoryRow, type Tally } from "./reports.js";
 import type { totals as totalsFn } from "./reports.js";
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -67,19 +67,25 @@ export interface IpoExportRow {
   amountAdjusted: number | null;
   checkedAt: Date | null;
   message: string | null;
+  listingGain: number | null;
 }
 
 export async function ipoWorkbook(
-  ipo: { name: string; registrar: string; registrarIpoId: string; allotmentDate: Date | null },
+  ipo: { name: string; registrar: string; registrarIpoId: string; allotmentDate: Date | null; listingDate?: Date | null; issuePrice?: number | null; listingPrice?: number | null },
   registrarName: string,
   counts: Record<string, number>,
   rows: IpoExportRow[],
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.created = new Date();
+  const gains = rows.map((r) => r.listingGain).filter((g): g is number => g != null);
   addKeyValues(wb, "Summary", ipo.name, [
     ["Registrar", `${registrarName} (ID ${ipo.registrarIpoId})`],
     ["Allotment date", ipo.allotmentDate, DATE],
+    ["Listing date", ipo.listingDate ?? null, DATE],
+    ["Issue price", ipo.issuePrice ?? null, MONEY],
+    ["Listing price", ipo.listingPrice ?? null, MONEY],
+    ["Listing gain (₹)", gains.length ? gains.reduce((a, b) => a + b, 0) : null, MONEY],
     ["Exported", new Date(), DATETIME],
     ["PANs in this export", rows.length, INT],
     ["Allotted", counts.ALLOTTED ?? 0, INT],
@@ -102,6 +108,7 @@ export async function ipoWorkbook(
       { header: "Category", key: "category", width: 16 },
       { header: "Price", key: "price", width: 10, numFmt: MONEY },
       { header: "Amount adjusted", key: "amountAdjusted", width: 16, numFmt: MONEY },
+      { header: "Listing gain", key: "listingGain", width: 14, numFmt: MONEY },
       { header: "Checked", key: "checkedAt", width: 18, numFmt: DATETIME },
       { header: "Message", key: "message", width: 40 },
     ],
@@ -132,6 +139,8 @@ export async function historyWorkbook(
     ["Allotment ratio", t.ratio, PCT],
     ["Shares allotted", t.sharesAllotted, INT],
     ["Allotted value (₹)", t.allottedValue, MONEY],
+    ["Listing gain (₹)", t.listingGain, MONEY],
+    ["Allotments without listing price", t.gainUnknown, INT],
   ]);
 
   const tallyCols = (first: Col[]): Col[] => [
@@ -143,6 +152,7 @@ export async function historyWorkbook(
     { header: "Shares applied", key: "sharesApplied", width: 15, numFmt: INT },
     { header: "Shares allotted", key: "sharesAllotted", width: 15, numFmt: INT },
     { header: "Allotted value (₹)", key: "allottedValue", width: 18, numFmt: MONEY },
+    { header: "Listing gain (₹)", key: "listingGain", width: 16, numFmt: MONEY },
     { header: "Errors", key: "errors", width: 8, numFmt: INT },
   ];
 
@@ -171,11 +181,15 @@ export async function historyWorkbook(
       { header: "Applied", key: "appliedQty", width: 10, numFmt: INT },
       { header: "Allotted", key: "allottedQty", width: 10, numFmt: INT },
       { header: "Category", key: "category", width: 16 },
-      { header: "Price", key: "price", width: 10, numFmt: MONEY },
+      { header: "Price", key: "paid", width: 10, numFmt: MONEY },
+      { header: "Listing price", key: "listingPrice", width: 13, numFmt: MONEY },
+      { header: "Listing gain", key: "gain", width: 13, numFmt: MONEY },
       { header: "Checked", key: "checkedAt", width: 18, numFmt: DATETIME },
     ],
     detail.map((r) => ({
       ...r,
+      paid: r.issuePrice ?? r.price,
+      gain: listingGain(r),
       registrar: registrarName(r.registrar),
       pan: panOf(r),
       status: STATUS_LABEL[r.status] ?? r.status,

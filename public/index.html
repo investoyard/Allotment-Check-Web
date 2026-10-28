@@ -80,11 +80,16 @@
       <div class="card">
         <div class="row">
           <b style="margin-right:8px">Add IPO</b>
-          <select id="registrarSel"></select>
-          <button class="btn" id="loadLive">Show IPOs from registrar</button>
+          <button class="btn" id="loadLive">Show live IPOs at all registrars</button>
+          <button class="btn hidden" id="refreshLive">Refresh</button>
+          <label class="muted hidden" id="untrackedWrap"><input type="checkbox" id="untrackedOnly" checked> Untracked only</label>
           <span id="liveMsg" class="muted"></span>
         </div>
-        <table id="liveTable" class="hidden" style="margin-top:10px"><thead><tr><th>Registrar ID</th><th>IPO</th><th></th></tr></thead><tbody id="liveRows"></tbody></table>
+        <table id="liveTable" class="hidden" style="margin-top:10px"><thead><tr><th>Registrar</th><th>IPO</th><th>Allotment date</th><th></th></tr></thead><tbody id="liveRows"></tbody></table>
+      </div>
+      <div class="card hidden" id="calCard">
+        <b>Upcoming dates</b>
+        <table style="margin-top:8px"><tbody id="calRows"></tbody></table>
       </div>
       <div class="card">
         <table><thead><tr><th>IPO</th><th>Registrar</th><th>Allotment</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Not applied</th>
@@ -107,6 +112,8 @@
         <div class="row" style="margin-top:12px">
           <label class="muted">Allotment date <input type="date" id="ipoAllot"></label>
           <label class="muted">Listing date <input type="date" id="ipoList"></label>
+          <label class="muted">Issue price ₹ <input type="number" id="ipoIssue" min="0" step="0.01" style="width:100px"></label>
+          <label class="muted">Listing price ₹ <input type="number" id="ipoListPrice" min="0" step="0.01" style="width:100px"></label>
           <label class="muted"><input type="checkbox" id="ipoAuto"> Auto-check on allotment day</label>
           <button class="btn" id="ipoSave">Save</button>
           <button class="btn" id="ipoArchive" data-admin-inline>Archive</button>
@@ -252,6 +259,8 @@ const fullPanParam = (box) => (me.role === "ADMIN" && $(box).checked ? "true" : 
 // --- Reports ---
 const pct = (r) => (r == null ? "—" : `${(r * 100).toFixed(1)}%`);
 const rupees = (n) => (n ? `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—");
+const gainText = (n) => (n == null ? "—" : `${n < 0 ? "−" : n > 0 ? "+" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`);
+const gainCell = (n, unknown) => `<td class="num${n < 0 ? " err" : ""}" title="${unknown ? `${unknown} allotment(s) have no listing price yet` : ""}">${n || !unknown ? gainText(n) : "—"}${unknown ? "*" : ""}</td>`;
 async function fillReportFilters() {
   if ($("#repClient").dataset.loaded) return;
   if (!registrars.length) ({ registrars } = await api("/api/registrars"));
@@ -273,17 +282,19 @@ async function loadReport() {
   const p = reportParams(); p.set("groupBy", $("#repGroup").value);
   const { totals: t, rows, groupBy } = await api(`/api/reports/history?${p}`);
   $("#repStats").innerHTML = [["IPOs", t.ipos], ["PANs", t.pans], ["Applications", t.applications], ["Allotted", t.allotted],
-    ["Allotment ratio", pct(t.ratio)], ["Shares allotted", fmtNum(t.sharesAllotted)], ["Allotted value", rupees(t.allottedValue)]]
-    .map(([k, v]) => `<div><b>${v}</b><span class="muted">${k}</span></div>`).join("");
+    ["Allotment ratio", pct(t.ratio)], ["Shares allotted", fmtNum(t.sharesAllotted)], ["Allotted value", rupees(t.allottedValue)],
+    ["Listing gain" + (t.gainUnknown ? "*" : ""), gainText(t.listingGain)]]
+    .map(([k, v]) => `<div><b>${v}</b><span class="muted">${k}</span></div>`).join("")
+    + (t.gainUnknown ? `<div class="muted" style="align-self:end">* ${t.gainUnknown} allotment(s) not counted — enter the IPO's listing price</div>` : "");
   const byPan = groupBy === "pan";
   $("#repHead").innerHTML = `<tr>${byPan ? "<th>Holder</th><th>PAN</th><th>Client</th>" : "<th>Client</th>"}
     <th class="num">IPOs applied</th><th class="num">Allotted</th><th class="num">Not allotted</th><th class="num">Ratio</th>
-    <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Errors</th></tr>`;
+    <th class="num">Shares applied</th><th class="num">Shares allotted</th><th class="num">Allotted value</th><th class="num">Listing gain</th><th class="num">Errors</th></tr>`;
   $("#repRows").innerHTML = rows.map((r) => `<tr>${byPan ? `<td>${esc(r.label)}</td><td class="mono">${esc(r.panMasked)}</td><td>${esc(r.clientName)}</td>` : `<td>${esc(r.label)}</td>`}
     <td class="num">${r.applied}</td><td class="num"><b>${r.allotted}</b></td><td class="num">${r.notAllotted}</td><td class="num">${pct(r.ratio)}</td>
     <td class="num">${fmtNum(r.sharesApplied)}</td><td class="num">${fmtNum(r.sharesAllotted)}</td><td class="num">${rupees(r.allottedValue)}</td>
-    <td class="num">${r.errors || ""}</td></tr>`).join("")
-    || `<tr><td colspan="${byPan ? 11 : 9}" class="muted">No checked results match these filters yet.</td></tr>`;
+    ${gainCell(r.listingGain, r.gainUnknown)}<td class="num">${r.errors || ""}</td></tr>`).join("")
+    || `<tr><td colspan="${byPan ? 12 : 10}" class="muted">No checked results match these filters yet.</td></tr>`;
 }
 ["#repFrom", "#repTo", "#repClient", "#repRegistrar", "#repIpo", "#repGroup"].forEach((s) => $(s).addEventListener("change", loadReport));
 $("#repExport").addEventListener("click", () => {
@@ -323,11 +334,9 @@ $("#schedRun").addEventListener("click", async (e) => {
 });
 
 async function loadIpos() {
-  if (!registrars.length) {
-    ({ registrars } = await api("/api/registrars"));
-    $("#registrarSel").innerHTML = registrars.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
-  }
+  if (!registrars.length) ({ registrars } = await api("/api/registrars"));
   const { ipos } = await api("/api/ipos");
+  renderCalendar(ipos);
   const regName = (id) => registrars.find((r) => r.id === id)?.name ?? id;
   $("#ipoRows").innerHTML = ipos.map((i) => `<tr>
     <td><a class="link" data-open="${i.id}">${esc(i.name)}</a></td><td class="muted">${esc(regName(i.registrar))}</td>
@@ -335,7 +344,7 @@ async function loadIpos() {
     <td class="num"><b>${i.counts.ALLOTTED}</b></td><td class="num">${i.counts.NOT_ALLOTTED}</td><td class="num">${i.counts.NOT_APPLIED}</td>
     <td class="num">${i.counts.ERROR || ""}</td><td class="num">${i.counts.PENDING || ""}</td>
     <td class="muted">${jobText(i.job)}</td><td><button class="btn" data-open="${i.id}">Open</button></td></tr>`).join("")
-    || `<tr><td colspan="9" class="muted">No IPOs tracked yet. Pick a registrar above and add one.</td></tr>`;
+    || `<tr><td colspan="10" class="muted">No IPOs tracked yet. Click "Show live IPOs" above and track one.</td></tr>`;
   loadToday();
   if (ipos.some((i) => jobActive(i.job))) pollTimer = setTimeout(loadIpos, 4000);
 }
@@ -347,25 +356,59 @@ function openIpo(id) {
 }
 $("#ipoRows").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
 
-$("#loadLive").addEventListener("click", async () => {
-  const reg = $("#registrarSel").value;
-  $("#liveMsg").textContent = "Loading…"; $("#liveMsg").className = "muted";
+/** Allotment and listing dates of tracked IPOs, from 3 days ago to 30 days ahead. */
+function renderCalendar(ipos) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const lo = today.getTime() - 3 * 864e5, hi = today.getTime() + 30 * 864e5;
+  const events = ipos.flatMap((i) => [["Allotment", i.allotmentDate], ["Listing", i.listingDate]]
+    .filter(([, d]) => d).map(([kind, d]) => ({ kind, t: new Date(`${dateOnly(d)}T00:00:00`).getTime(), ipo: i })))
+    .filter((e) => e.t >= lo && e.t <= hi).sort((a, b) => a.t - b.t || a.kind.localeCompare(b.kind));
+  $("#calCard").classList.toggle("hidden", !events.length);
+  $("#calRows").innerHTML = events.map((e) => {
+    const days = Math.round((e.t - today.getTime()) / 864e5);
+    const when = days === 0 ? "<b>Today</b>" : days === 1 ? "Tomorrow" : days === -1 ? "Yesterday" : days < 0 ? `${-days} days ago` : `in ${days} days`;
+    return `<tr${days < 0 ? ' class="muted"' : ""}><td style="width:130px">${fmtDay(e.t)}</td><td style="width:110px">${when}</td>
+      <td><span class="tag ${e.kind === "Allotment" ? "PENDING" : "NOT_APPLIED"}">${e.kind}</span></td>
+      <td><a class="link" data-open="${e.ipo.id}">${esc(e.ipo.name)}</a></td></tr>`;
+  }).join("");
+}
+$("#calRows").addEventListener("click", (e) => { if (e.target.dataset.open) openIpo(e.target.dataset.open); });
+
+let liveData = null;
+async function loadLive(refresh) {
+  $("#liveMsg").textContent = "Asking registrars…"; $("#liveMsg").className = "muted";
   try {
-    const { ipos } = await api(`/api/registrars/${reg}/ipos`);
-    $("#liveMsg").textContent = `${ipos.length} IPO${ipos.length === 1 ? "" : "s"} open for status check`;
-    $("#liveTable").classList.remove("hidden");
-    $("#liveRows").innerHTML = ipos.map((i) => `<tr><td class="mono">${esc(i.registrarIpoId)}</td><td>${esc(i.name)}</td>
-      <td>${i.trackedIpoId ? `<a class="link" data-open-live="${i.trackedIpoId}">Tracked ✓</a>`
-        : `<button class="btn" data-track='${esc(JSON.stringify({ registrar: reg, registrarIpoId: i.registrarIpoId, name: i.name, isSme: i.isSme }))}'>Track</button>`}</td></tr>`).join("");
+    liveData = await api(`/api/registrars/live${refresh ? "?refresh=true" : ""}`);
+    renderLive();
+    ["#liveTable", "#refreshLive", "#untrackedWrap"].forEach((s) => $(s).classList.remove("hidden"));
   } catch (err) { $("#liveMsg").textContent = err.message; $("#liveMsg").className = "err"; }
-});
+}
+function renderLive() {
+  const { registrars: regs, ipos } = liveData;
+  const failed = regs.filter((r) => r.error);
+  $("#liveMsg").innerHTML = regs.map((r) => `${esc(r.name)}: ${r.error ? '<span class="err">no response</span>' : r.count}`).join(" · ");
+  const rows = ipos.filter((i) => !$("#untrackedOnly").checked || !i.trackedIpoId);
+  $("#liveRows").innerHTML = rows.map((i) => `<tr><td class="muted">${esc(i.registrarName)}</td><td>${esc(i.name)}${i.isSme ? ' <span class="tag">SME</span>' : ""}</td>
+    <td>${i.trackedIpoId ? (i.allotmentDate ? fmtDay(i.allotmentDate) : "—") : '<input type="date" class="liveDate">'}</td>
+    <td>${i.trackedIpoId ? `<a class="link" data-open-live="${i.trackedIpoId}">Tracked ✓</a>`
+      : `<button class="btn" data-track='${esc(JSON.stringify({ registrar: i.registrar, registrarIpoId: i.registrarIpoId, name: i.name, isSme: i.isSme }))}'>Track</button>`}</td></tr>`).join("")
+    || `<tr><td colspan="4" class="muted">${ipos.length ? "All live IPOs are already tracked." : "No IPOs listed right now."}${failed.length ? " Some registrars didn't respond — try Refresh." : ""}</td></tr>`;
+}
+$("#loadLive").addEventListener("click", () => loadLive(false));
+$("#refreshLive").addEventListener("click", () => loadLive(true));
+$("#untrackedOnly").addEventListener("change", () => liveData && renderLive());
 $("#liveRows").addEventListener("click", async (e) => {
   if (e.target.dataset.openLive) return openIpo(e.target.dataset.openLive);
   if (!e.target.dataset.track) return;
   e.target.disabled = true;
+  const body = JSON.parse(e.target.dataset.track);
+  const date = e.target.closest("tr").querySelector(".liveDate")?.value;
+  if (date) body.allotmentDate = date;
   try {
-    const { ipo } = await api("/api/ipos", { method: "POST", body: e.target.dataset.track });
-    e.target.outerHTML = `<a class="link" data-open-live="${ipo.id}">Tracked ✓</a>`;
+    const { ipo } = await api("/api/ipos", { method: "POST", body: JSON.stringify(body) });
+    const live = liveData.ipos.find((i) => i.registrar === body.registrar && i.registrarIpoId === body.registrarIpoId);
+    if (live) { live.trackedIpoId = ipo.id; live.allotmentDate = ipo.allotmentDate; }
+    renderLive();
     loadIpos();
   } catch (err) { e.target.disabled = false; $("#liveMsg").textContent = err.message; $("#liveMsg").className = "err"; }
 });
@@ -379,13 +422,16 @@ async function loadIpo() {
     $("#ipoAllot").value = dateOnly(ipo.allotmentDate);
     $("#ipoList").value = dateOnly(ipo.listingDate);
     $("#ipoAuto").checked = ipo.autoCheck;
+    $("#ipoIssue").value = ipo.issuePrice ?? "";
+    $("#ipoListPrice").value = ipo.listingPrice ?? "";
   }
   $("#ipoArchive").textContent = ipo.archived ? "Unarchive" : "Archive";
   $("#ipoArchive").dataset.archived = ipo.archived;
   const c = ipo.counts;
   $("#ipoStats").innerHTML = [["ALLOTTED", c.ALLOTTED], ["NOT_ALLOTTED", c.NOT_ALLOTTED], ["NOT_APPLIED", c.NOT_APPLIED], ["ERROR", c.ERROR], ["PENDING", c.PENDING]]
     .map(([k, v]) => `<div><b>${v}</b><a class="link" data-filter="${k}">${STATUS_LABEL[k]}</a></div>`).join("")
-    + `<div><b>${fmtNum(c.allottedShares)}</b><span class="muted">Shares allotted</span></div>`;
+    + `<div><b>${fmtNum(c.allottedShares)}</b><span class="muted">Shares allotted</span></div>`
+    + (ipo.listingGain == null ? "" : `<div><b class="${ipo.listingGain < 0 ? "err" : ""}">${gainText(ipo.listingGain)}</b><span class="muted">Listing gain</span></div>`);
 
   const j = ipo.job, active = jobActive(j);
   document.querySelectorAll("[data-scope]").forEach((b) => (b.disabled = active));
@@ -429,11 +475,13 @@ async function loadResults() {
 }
 
 $("#backToIpos").addEventListener("click", () => show("ipos"));
-["#ipoAllot", "#ipoList", "#ipoAuto"].forEach((s) => $(s).addEventListener("change", () => { $("#ipoSave").dataset.dirty = "1"; $("#ipoSaveMsg").textContent = "Unsaved changes"; }));
+["#ipoAllot", "#ipoList", "#ipoAuto", "#ipoIssue", "#ipoListPrice"].forEach((s) => $(s).addEventListener("change", () => { $("#ipoSave").dataset.dirty = "1"; $("#ipoSaveMsg").textContent = "Unsaved changes"; }));
 $("#ipoSave").addEventListener("click", async () => {
   try {
     await api(`/api/ipos/${currentIpo}`, { method: "PATCH", body: JSON.stringify({
       allotmentDate: $("#ipoAllot").value || null, listingDate: $("#ipoList").value || null, autoCheck: $("#ipoAuto").checked,
+      issuePrice: $("#ipoIssue").value ? Number($("#ipoIssue").value) : null,
+      listingPrice: $("#ipoListPrice").value ? Number($("#ipoListPrice").value) : null,
     }) });
     delete $("#ipoSave").dataset.dirty;
     $("#ipoSaveMsg").textContent = "Saved"; $("#ipoSaveMsg").className = "muted";

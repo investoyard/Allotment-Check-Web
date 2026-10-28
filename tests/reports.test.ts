@@ -1,13 +1,14 @@
-import ExcelJS from "exceljs";
+﻿import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { historyWorkbook, ipoWorkbook } from "../src/services/excel.js";
-import { resultWhere, tally, totals, type HistoryRow } from "../src/services/reports.js";
+import { listingGain, resultWhere, tally, totals, type HistoryRow } from "../src/services/reports.js";
 
 let seq = 0;
 const row = (o: Partial<HistoryRow>): HistoryRow => ({
   ipoId: 1, ipoName: "Alpha Ltd - IPO", registrar: "mufg", isSme: false, ipoDate: new Date("2026-10-01"),
   panId: 1, panMasked: "ABCPX****K", panEncrypted: `enc${++seq}`, holderName: "Ravi", clientId: 1, clientName: "Sharma Family",
   status: "NOT_ALLOTTED", appliedQty: 28, allottedQty: 0, category: "RETAIL", price: 500, amountAdjusted: 0, checkedAt: new Date("2026-10-02"),
+  issuePrice: null, listingPrice: null,
   ...o,
 });
 
@@ -25,7 +26,7 @@ describe("tally", () => {
     const [sharma, om] = [tally(ROWS, "client").find((t) => t.key === 1)!, tally(ROWS, "client").find((t) => t.key === 2)!];
     expect(sharma).toMatchObject({ label: "Sharma Family", applied: 3, allotted: 1, notAllotted: 2, sharesApplied: 84, sharesAllotted: 28, allottedValue: 14000, errors: 1 });
     expect(sharma.ratio).toBeCloseTo(1 / 3);
-    // Price unknown → shares counted, value not.
+    // Price unknown â†’ shares counted, value not.
     expect(om).toMatchObject({ applied: 1, allotted: 1, ratio: 1, sharesAllotted: 14, allottedValue: 0 });
   });
 
@@ -40,8 +41,31 @@ describe("tally", () => {
   });
 
   it("totals", () => {
-    expect(totals(ROWS)).toEqual({ ipos: 3, pans: 3, applications: 4, allotted: 2, ratio: 0.5, sharesAllotted: 42, allottedValue: 14000 });
+    expect(totals(ROWS)).toEqual({ ipos: 3, pans: 3, applications: 4, allotted: 2, ratio: 0.5, sharesAllotted: 42, allottedValue: 14000, listingGain: 0, gainUnknown: 2 });
     expect(totals([]).ratio).toBeNull();
+  });
+});
+
+describe("listing P&L", () => {
+  const allotted = (o: Partial<HistoryRow>) => row({ status: "ALLOTTED", allottedQty: 28, price: 500, ...o });
+
+  it("uses the IPO issue price, falling back to the registrar price", () => {
+    expect(listingGain(allotted({ listingPrice: 600 }))).toBe(2800);
+    expect(listingGain(allotted({ listingPrice: 600, issuePrice: 550 }))).toBe(1400);
+    expect(listingGain(allotted({ listingPrice: 450.5 }))).toBe(-1386);
+  });
+
+  it("is unknown without a listing price or any issue price, and zero-less for non-allotted", () => {
+    expect(listingGain(allotted({}))).toBeNull();
+    expect(listingGain(allotted({ price: null, listingPrice: 600 }))).toBeNull();
+    expect(listingGain(row({ status: "NOT_ALLOTTED", listingPrice: 600 }))).toBeNull();
+  });
+
+  it("rolls up per client and in totals, counting allotments with missing prices", () => {
+    const rows = [allotted({ listingPrice: 600 }), allotted({ ipoId: 2, listingPrice: 400 }), allotted({ ipoId: 3 })];
+    expect(tally(rows, "client")[0]).toMatchObject({ allotted: 3, listingGain: 0, gainUnknown: 1 });
+    expect(totals(rows)).toMatchObject({ listingGain: 0, gainUnknown: 1 });
+    expect(totals([allotted({ listingPrice: 600 })]).listingGain).toBe(2800);
   });
 });
 
@@ -55,7 +79,7 @@ describe("resultWhere", () => {
     expect(w.ipo!.OR).toEqual([{ allotmentDate: range }, { allotmentDate: null, createdAt: range }]);
   });
 
-  it("no filters → active PANs only", () => {
+  it("no filters â†’ active PANs only", () => {
     expect(resultWhere({})).toEqual({ ipo: {}, pan: { active: true } });
   });
 });
@@ -73,8 +97,8 @@ describe("excel", () => {
       "MUFG Intime",
       { ALLOTTED: 1, NOT_ALLOTTED: 0, NOT_APPLIED: 0, ERROR: 0, PENDING: 1, allottedShares: 28 },
       [
-        { clientName: "Sharma", holderName: "Ravi", pan: "ABCPX****K", status: "ALLOTTED", appliedQty: 28, allottedQty: 28, category: "RETAIL", price: 500, amountAdjusted: 14000, checkedAt: new Date(), message: null },
-        { clientName: "Sharma", holderName: "Asha", pan: "ABCPY****L", status: "PENDING", appliedQty: null, allottedQty: null, category: null, price: null, amountAdjusted: null, checkedAt: null, message: null },
+        { clientName: "Sharma", holderName: "Ravi", pan: "ABCPX****K", status: "ALLOTTED", appliedQty: 28, allottedQty: 28, category: "RETAIL", price: 500, amountAdjusted: 14000, checkedAt: new Date(), message: null, listingGain: 2800 },
+        { clientName: "Sharma", holderName: "Asha", pan: "ABCPY****L", status: "PENDING", appliedQty: null, allottedQty: null, category: null, price: null, amountAdjusted: null, checkedAt: null, message: null, listingGain: null },
       ],
     );
     const wb = await load(buf);

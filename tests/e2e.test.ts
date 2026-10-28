@@ -281,6 +281,39 @@ describe.runIf(run)("end to end", () => {
     expect((await prisma.checkResult.findUniqueOrThrow({ where: { ipoId_panId: { ipoId: lateIpo.id, panId: pan.id } } })).status).toBe("NOT_APPLIED");
   });
 
+  it("listing P&L on the IPO, in reports and in the export", async () => {
+    const before = (await app.inject({ url: `/api/ipos/${ipoId}`, ...as("operator") })).json().ipo;
+    expect(before.listingGain).toBeNull();
+
+    const patch = await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { listingPrice: 612.5 } });
+    expect(patch.statusCode).toBe(200);
+    // Holder One: 28 shares, registrar price 500 → (612.5 − 500) × 28
+    expect((await app.inject({ url: `/api/ipos/${ipoId}`, ...as("operator") })).json().ipo.listingGain).toBe(3150);
+
+    await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { issuePrice: 520 } });
+    expect((await app.inject({ url: `/api/ipos/${ipoId}`, ...as("operator") })).json().ipo.listingGain).toBe(2590);
+
+    const rep = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}`, ...as("operator") })).json();
+    expect(rep.totals).toMatchObject({ listingGain: 2590, gainUnknown: 0 });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await app.inject({ url: `/api/ipos/${ipoId}/export?status=ALLOTTED`, ...as("operator") })).rawPayload as unknown as ArrayBuffer);
+    const res = wb.getWorksheet("Results")!;
+    const col = (res.getRow(1).values as unknown[]).indexOf("Listing gain");
+    expect(res.getRow(2).getCell(col).value).toBe(2590);
+
+    expect((await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { listingPrice: -5 } })).statusCode).toBe(400);
+  });
+
+  it("live IPOs across all registrars, flagged when tracked", async () => {
+    const live = (await app.inject({ url: "/api/registrars/live", ...as("operator") })).json();
+    expect(live.registrars.map((r: { id: string; count: number; error: unknown }) => [r.id, r.count, r.error])).toEqual([["fake", 1, null], ["late", 1, null]]);
+    const f1 = live.ipos.filter((i: { registrar: string }) => i.registrar === "fake")[0];
+    expect(f1).toMatchObject({ registrarIpoId: "F1", registrarName: "Fake Registrar", trackedIpoId: ipoId });
+    // "late" lists F1 too, but it isn't tracked under that registrar.
+    expect(live.ipos.find((i: { registrar: string }) => i.registrar === "late").trackedIpoId).toBeNull();
+  });
+
   it("only admins can trigger the scheduler manually", async () => {
     expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("operator") })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("admin") })).statusCode).toBe(200);
