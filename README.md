@@ -45,8 +45,8 @@ Use **Import** in the UI with an `.xlsx` or `.csv` file. Headers are matched fle
 - See `samples/pans-template.csv` for an example file.
 
 ## Checking allotment
-1. On **IPOs**, pick a registrar and click **Show IPOs from registrar**. Then click **Track** next to the IPO.
-2. Open the IPO and click **Check unchecked**. The check runs in the background, so you can close the page.
+1. On **IPOs**, click **Show live IPOs at all registrars**. Enter the allotment date if you know it, then click **Track**.
+2. Open the IPO and click **Check unchecked**, or let the scheduler do it on allotment day. The check runs in the background, so you can close the page.
    - Each registrar gets about one PAN per second, so 1000 PANs take roughly 15–20 minutes.
    - Checks for different registrars run in parallel.
    - Temporary failures (site busy, timeouts) are retried 3 times automatically.
@@ -60,8 +60,12 @@ Supported registrars:
 | MUFG Intime (Link Intime) | ~1 PAN/s | |
 | KFin Technologies | ~1 PAN/s | |
 | Bigshare Services | ~1 PAN / 3 s | Their server rate-limits, so the tool waits whenever it is asked to |
+| Maashitla Securities | ~1 PAN/s | |
+| Skyline Financial Services | ~1 PAN / 1.5 s | **Beta:** the result page hasn't been seen with a real PAN yet. A page the tool can't read shows as an error, never as a guessed status |
+| Purva Sharegistry | ~1 PAN / 1.5 s | **Beta**, same as Skyline |
 
-BSE/NSE status pages are not supported. They need a captcha, and they only show the registrar's data, which the tool already fetches directly.
+**Not supported, because their status pages show a captcha:** BSE/NSE, Cameo and Integrated Registry. Check those manually. BSE/NSE only show the registrar's data anyway.
+If a supported registrar ever adds a captcha, its adapter stops and reports an error instead of trying to get around it.
 
 You can test an adapter from the command line without using the database:
 ```
@@ -87,6 +91,9 @@ The server has to be running for this to work. See "Running as a service" below.
   - **Download Excel** gives Overview, By client, By PAN and Detail sheets.
 - **Only "Allotted" and "Not allotted" count as applied.** "Not applied" and errors are left out of the ratio.
 - **PANs in exports are masked.** Admins can tick **Full PANs**, and every export is written to the audit log.
+- **Listing gain:** enter the **Listing price** on the IPO page. If you also enter an **Issue price**, it's used; otherwise the price the registrar reported is.
+  - Gain = (listing − issue) × shares allotted. It's shown on the IPO page, in reports and in both Excel files.
+  - Allotments with no listing price yet are counted separately (marked \* in reports).
 
 ## Roles
 - **ADMIN**: manage users, import and edit PANs, reveal full PANs (each reveal is logged), view the audit log.

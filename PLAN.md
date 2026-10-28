@@ -66,7 +66,7 @@ Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRE
 | 3 | KFin and Bigshare adapters, Retry-After handling. BSE dropped (see notes). Captcha queue deferred: no supported registrar needs one today | Done; live PAN checks not yet verified |
 | 4 | Excel export + history report with filters | Done; e2e-tested against the DB |
 | 5 | Scheduler (auto-run on allotment day, sample probes, error retries), date/auto-check editing, "Today's allotments" dashboard panel. Email/Telegram alerts skipped (dashboard-only by choice) | Done; e2e-tested |
-| 6 | Remaining registrars, IPO calendar, listing P&L | |
+| 6 | Maashitla, Skyline (beta), Purva (beta) adapters; Cameo and Integrated skipped (captcha). Combined live-IPO list across registrars, upcoming-dates calendar, listing P&L | Done; live PAN checks not yet verified |
 
 ## Registrar notes
 - **MUFG Intime** — `in.mpms.mufg.com/Initial_Offer/IPO.aspx`. Page methods `GetDetails` (IPO list),
@@ -82,6 +82,18 @@ Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRE
 - **BSE** — not supported. The page shows a captcha but only checks it in the browser, so
   automating its API means getting around that captcha. It only re-displays registrar data
   anyway. Revisit only if BSE adds a supported flow.
+- **Maashitla** — React app. IPO list `GET api.maashitla.com/api/company-directory` (slugs).
+  Lookup `GET …execute-api…/prod/check/<slug>?pan=` → `{name, shares_applied, shares_allotted}`;
+  404 or `name: null` = no application. No captcha.
+- **Skyline** — PHP. IPO list is `<select id="company">` on `ipo.php`. Lookup: POST
+  `display_application.php` with `company` (gives PHPSESSID + `csrf_token`), then POST again with
+  `pan`, `csrf_token`, `company`, `action=search`. No captcha. Result HTML not yet seen → parsed
+  generically (`html.ts`), and an unrecognised page is reported as an error.
+- **Purva** — Django. IPO list is `<select id="company_id">`. Lookup: GET page (csrftoken cookie +
+  `csrfmiddlewaretoken`), POST `company_id`, `panNumber` with Referer. No captcha today (old captcha
+  CSS remains; the adapter stops if a captcha field appears). Result HTML parsed generically.
+- **Cameo** — not supported: server-side image captcha on mirror 1, canvas captcha on mirrors 2–3.
+- **Integrated Registry** — not supported: canvas captcha shown in the UI.
 - **Captcha queue** — reserved for a registrar that verifies captchas on the server. Build it
   when one is added.
 
