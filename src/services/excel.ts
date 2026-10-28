@@ -124,7 +124,7 @@ export async function historyWorkbook(
   byClient: Tally[],
   byPan: Tally[],
   detail: HistoryRow[],
-  panOf: (encryptedOrMasked: { panMasked: string; panEncrypted: string }) => string,
+  panOf: (p: { panMasked: string; panEncrypted: string | null }) => string,
   registrarName: (id: string) => string,
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
@@ -165,7 +165,7 @@ export async function historyWorkbook(
       { header: "Holder", key: "label", width: 28 },
       { header: "PAN", key: "pan", width: 13 },
     ]),
-    byPan.map((p) => ({ ...p, pan: panOf({ panMasked: p.panMasked!, panEncrypted: p.panEncrypted! }) })),
+    byPan.map((p) => ({ ...p, label: p.deleted ? `${p.label} (deleted)` : p.label, pan: panOf({ panMasked: p.panMasked!, panEncrypted: p.panEncrypted ?? null }) })),
   );
   addTable(
     wb,
@@ -191,6 +191,7 @@ export async function historyWorkbook(
       paid: r.issuePrice ?? r.price,
       gain: listingGain(r),
       registrar: registrarName(r.registrar),
+      holderName: r.deleted ? `${r.holderName} (deleted)` : r.holderName,
       pan: panOf(r),
       status: STATUS_LABEL[r.status] ?? r.status,
       _status: r.status,

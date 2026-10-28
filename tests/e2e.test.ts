@@ -1,4 +1,4 @@
-﻿// End-to-end test against the real Postgres, in a throwaway schema, with a fake registrar.
+// End-to-end test against the real Postgres, in a throwaway schema, with a fake registrar.
 // Run with:  npm run test:e2e
 import { execSync } from "node:child_process";
 import "dotenv/config";
@@ -227,7 +227,7 @@ describe.runIf(run)("end to end", () => {
     const lateIpo = await prisma.ipo.create({ data: { name: "Late Ltd - IPO", registrar: "late", registrarIpoId: "L1", allotmentDate: new Date(`${today}T00:00:00Z`) } });
     expect((await app.scheduler.plan(noonIst())).map((p) => p.ipo.id)).toEqual([lateIpo.id]);
 
-    await app.scheduler.tick(new Date(`${today}T20:00:00Z`)); // 01:30 IST next day â†’ different date, nothing due
+    await app.scheduler.tick(new Date(`${today}T20:00:00Z`)); // 01:30 IST next day → different date, nothing due
     await app.scheduler.tick(new Date(`${today}T00:30:00Z`)); // 06:00 IST, before start hour
     expect(app.scheduler.lastTick!.entries[0]!.decision.reason).toMatch(/Outside checking hours/);
     expect(await prisma.checkJob.count({ where: { ipoId: lateIpo.id } })).toBe(0);
@@ -287,7 +287,7 @@ describe.runIf(run)("end to end", () => {
 
     const patch = await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { listingPrice: 612.5 } });
     expect(patch.statusCode).toBe(200);
-    // Holder One: 28 shares, registrar price 500 â†’ (612.5 âˆ’ 500) Ã— 28
+    // Holder One: 28 shares, registrar price 500 → (612.5 − 500) × 28
     expect((await app.inject({ url: `/api/ipos/${ipoId}`, ...as("operator") })).json().ipo.listingGain).toBe(3150);
 
     await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { issuePrice: 520 } });
@@ -319,7 +319,7 @@ describe.runIf(run)("end to end", () => {
     const res = await app.inject({ method: "POST", url: `/api/pans/import?dryRun=false&checkIpoIds=${ipoId}`, ...as("admin"), ...multipart("new.csv", csv) });
     expect(res.statusCode, res.body).toBe(200);
     const [c] = res.json().checks;
-    // Only the 2 new PANs â€” the 3 existing ones already have results for this IPO.
+    // Only the 2 new PANs — the 3 existing ones already have results for this IPO.
     expect(c).toMatchObject({ ipoId, total: 2 });
     const job = await prisma.checkJob.findUniqueOrThrow({ where: { id: c.jobId } });
     expect(job.trigger).toBe("import");
@@ -346,6 +346,83 @@ describe.runIf(run)("end to end", () => {
     expect(followUp.panIds).toHaveLength(1);
     await prisma.checkJob.update({ where: { id: running.id }, data: { state: "DONE" } });
     await app.runner.cancel(followUp.id);
+  });
+
+  it("editing a PAN's name, mobile and DP ID", async () => {
+    const pan = await prisma.pan.findFirstOrThrow({ where: { holderName: "Holder Two" } });
+    const res = await app.inject({ method: "PATCH", url: `/api/pans/${pan.id}`, ...as("admin"), payload: { holderName: "Holder Two Edited", mobile: "9111111111", dpClientId: "" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().pan).toMatchObject({ holderName: "Holder Two Edited", mobile: "9111111111", dpClientId: null });
+    expect((await app.inject({ method: "PATCH", url: `/api/pans/${pan.id}`, ...as("operator"), payload: { holderName: "x" } })).statusCode).toBe(403);
+  });
+
+  it("deleting PANs keeps their IPO history in reports, masked", async () => {
+    const one = await prisma.pan.findFirstOrThrow({ where: { holderName: "Holder One" } }); // allotted 28 in Fake IPO
+    const before = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}`, ...as("operator") })).json().totals;
+
+    expect((await app.inject({ method: "DELETE", url: `/api/pans/${one.id}`, ...as("admin") })).statusCode).toBe(200);
+    expect(await prisma.pan.findUnique({ where: { id: one.id } })).toBeNull();
+    const kept = await prisma.checkResult.findFirstOrThrow({ where: { ipoId, holderName: "Holder One" } });
+    expect(kept).toMatchObject({ panId: null, panMasked: "AAAPA****A", clientName: "Family A", status: "ALLOTTED" });
+
+    // Report totals for the IPO are unchanged; the PAN shows as deleted.
+    const after = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("operator") })).json();
+    expect(after.totals).toMatchObject({ applications: before.applications, allotted: before.allotted, sharesAllotted: before.sharesAllotted });
+    expect(after.rows.find((r: { label: string }) => r.label === "Holder One")).toMatchObject({ deleted: true, panMasked: "AAAPA****A", allotted: 1 });
+    // Client filter still finds it through the snapshot.
+    const famA = await prisma.client.findFirstOrThrow({ where: { name: "Family A" } });
+    const byClient = (await app.inject({ url: `/api/reports/history?clientId=${famA.id}&groupBy=pan`, ...as("operator") })).json();
+    expect(byClient.rows.map((r: { label: string }) => r.label)).toContain("Holder One");
+
+    // Full-PAN export can't resurrect it: it stays masked.
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await app.inject({ url: `/api/reports/history/export?fullPan=true&ipoId=${ipoId}`, ...as("admin") })).rawPayload as unknown as ArrayBuffer);
+    const detail = JSON.stringify(wb.getWorksheet("Detail")!.getSheetValues());
+    expect(detail).toContain("Holder One (deleted)");
+    expect(detail).not.toContain("AAAPA0001A");
+    expect(detail).toContain("AAAPB0002B"); // live PANs still export in full
+
+    // The IPO page only counts live PANs.
+    const ipo = (await app.inject({ url: `/api/ipos/${ipoId}`, ...as("operator") })).json().ipo;
+    expect(ipo.counts.ALLOTTED).toBe(1); // New Holder; Holder One is gone from the live list
+  });
+
+  it("bulk delete by selection, by filter, and from an Excel list (with preview)", async () => {
+    const famC = await prisma.client.findFirstOrThrow({ where: { name: "Family C" } });
+    const cPans = await prisma.pan.findMany({ where: { clientId: famC.id }, orderBy: { id: "asc" } });
+    expect(cPans.length).toBe(3);
+
+    const sel = await app.inject({ method: "POST", url: "/api/pans/bulk-delete", ...as("admin"), payload: { ids: [cPans[0]!.id] } });
+    expect(sel.json()).toEqual({ deleted: 1 });
+
+    const csv = ["PAN", "AAAPE0002E", "aaapf0003f", "ZZZPZ9999Z", "BAD"].join("\n");
+    const preview = (await app.inject({ method: "POST", url: "/api/pans/bulk-delete/file?dryRun=true", ...as("admin"), ...multipart("del.csv", csv) })).json();
+    expect(preview.matched.map((m: { panMasked: string }) => m.panMasked).sort()).toEqual(["AAAPE****E", "AAAPF****F"]);
+    expect(preview.notFound).toEqual([{ rowNumber: 4, panMasked: "ZZZPZ****Z" }]);
+    expect(preview.errors).toEqual([{ rowNumber: 5, message: "Invalid PAN format" }]);
+    expect(await prisma.pan.count({ where: { clientId: famC.id } })).toBe(2); // preview deletes nothing
+
+    expect((await app.inject({ method: "POST", url: "/api/pans/bulk-delete/file?dryRun=false", ...as("operator"), ...multipart("del.csv", csv) })).statusCode).toBe(403);
+    const done = (await app.inject({ method: "POST", url: "/api/pans/bulk-delete/file?dryRun=false", ...as("admin"), ...multipart("del.csv", csv) })).json();
+    expect(done.deleted).toBe(2);
+    expect(await prisma.pan.count({ where: { clientId: famC.id } })).toBe(0);
+
+    // Filter-based: everything matching "Holder Three".
+    const byFilter = (await app.inject({ method: "POST", url: "/api/pans/bulk-delete", ...as("admin"), payload: { filter: { q: "Holder Three" } } })).json();
+    expect(byFilter.deleted).toBe(1);
+    expect(await prisma.auditLog.count({ where: { action: "pan.bulk_delete" } })).toBeGreaterThanOrEqual(1);
+  });
+
+  it("download formats for bulk uploads", async () => {
+    for (const [type, cols] of [["pans", ["PAN", "Name", "Client", "Mobile", "DP ID"]], ["delete", ["PAN"]]] as const) {
+      const res = await app.inject({ url: `/api/templates/${type}`, ...as("operator") });
+      expect(res.statusCode).toBe(200);
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(res.rawPayload as unknown as ArrayBuffer);
+      expect((wb.getWorksheet("PANs")!.getRow(1).values as unknown[]).slice(1)).toEqual(cols);
+      expect(wb.getWorksheet("PANs")!.rowCount).toBe(1); // headers only — no sample rows to import by mistake
+    }
+    expect((await app.inject({ url: "/api/templates/nope", ...as("operator") })).statusCode).toBe(404);
   });
 
   it("only admins can trigger the scheduler manually", async () => {

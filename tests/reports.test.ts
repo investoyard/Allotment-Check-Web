@@ -1,4 +1,4 @@
-﻿import ExcelJS from "exceljs";
+import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { historyWorkbook, ipoWorkbook } from "../src/services/excel.js";
 import { listingGain, resultWhere, tally, totals, type HistoryRow } from "../src/services/reports.js";
@@ -10,6 +10,7 @@ const row = (o: Partial<HistoryRow>): HistoryRow => ({
   status: "NOT_ALLOTTED", appliedQty: 28, allottedQty: 0, category: "RETAIL", price: 500, amountAdjusted: 0, checkedAt: new Date("2026-10-02"),
   issuePrice: null, listingPrice: null,
   ...o,
+  panKey: o.panKey ?? `p${o.panId ?? 1}`, deleted: o.deleted ?? false,
 });
 
 const ROWS: HistoryRow[] = [
@@ -23,10 +24,10 @@ const ROWS: HistoryRow[] = [
 
 describe("tally", () => {
   it("groups by client; not-applied and errors stay out of the ratio", () => {
-    const [sharma, om] = [tally(ROWS, "client").find((t) => t.key === 1)!, tally(ROWS, "client").find((t) => t.key === 2)!];
+    const [sharma, om] = [tally(ROWS, "client").find((t) => t.key === "c1")!, tally(ROWS, "client").find((t) => t.key === "c2")!];
     expect(sharma).toMatchObject({ label: "Sharma Family", applied: 3, allotted: 1, notAllotted: 2, sharesApplied: 84, sharesAllotted: 28, allottedValue: 14000, errors: 1 });
     expect(sharma.ratio).toBeCloseTo(1 / 3);
-    // Price unknown â†’ shares counted, value not.
+    // Price unknown → shares counted, value not.
     expect(om).toMatchObject({ applied: 1, allotted: 1, ratio: 1, sharesAllotted: 14, allottedValue: 0 });
   });
 
@@ -73,14 +74,22 @@ describe("resultWhere", () => {
   it("builds date, registrar and client filters", () => {
     const w = resultWhere({ from: "2026-10-01", to: "2026-10-31", registrar: "kfin", clientId: 5, ipoId: 9 });
     expect(w.ipoId).toBe(9);
-    expect(w.pan).toEqual({ active: true, clientId: 5 });
+    // Client filter also matches deleted PANs through the result's snapshot.
+    expect(w.OR).toEqual([{ pan: { clientId: 5 } }, { panId: null, clientId: 5 }]);
     expect(w.ipo).toMatchObject({ registrar: "kfin" });
     const range = { gte: new Date("2026-10-01T00:00:00Z"), lte: new Date("2026-10-31T23:59:59.999Z") };
     expect(w.ipo!.OR).toEqual([{ allotmentDate: range }, { allotmentDate: null, createdAt: range }]);
   });
 
-  it("no filters â†’ active PANs only", () => {
-    expect(resultWhere({})).toEqual({ ipo: {}, pan: { active: true } });
+  it("no filters → every result, including deactivated and deleted PANs", () => {
+    expect(resultWhere({})).toEqual({ ipo: {} });
+  });
+
+  it("groups a deleted PAN's results by its snapshot, and counts it once", () => {
+    const gone = (ipoId: number) => row({ ipoId, panId: null, panKey: "dABCPZ****Z|Gone", deleted: true, panEncrypted: null, holderName: "Gone", status: "ALLOTTED", allottedQty: 10 });
+    const t = tally([gone(1), gone(2), row({ panId: 7, panKey: "p7" })], "pan");
+    expect(t.find((x) => x.deleted)).toMatchObject({ label: "Gone", applied: 2, allotted: 2, panEncrypted: null });
+    expect(totals([gone(1), gone(2), row({ panId: 7, panKey: "p7" })]).pans).toBe(2);
   });
 });
 

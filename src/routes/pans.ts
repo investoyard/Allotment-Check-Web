@@ -3,9 +3,10 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireAdmin, requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
-import { parseRows, readSheet } from "../lib/import.js";
-import { isValidPan, normalizePan } from "../lib/pan.js";
+import { parsePanList, parseRows, readSheet } from "../lib/import.js";
+import { isValidPan, maskPan, normalizePan } from "../lib/pan.js";
 import { createCheckJob } from "../services/checkJobs.js";
+import { deletePans } from "../services/panDelete.js";
 import { applyImport, planImport } from "../services/panImport.js";
 
 const listQuery = z.object({
@@ -29,13 +30,26 @@ const createBody = z.object({
   dpClientId: z.string().trim().optional(),
 });
 
+const optionalText = z.string().trim().max(50).nullable().optional().transform((v) => (v === "" ? null : v));
 const updateBody = z.object({
-  holderName: z.string().trim().min(1).optional(),
+  holderName: z.string().trim().min(1).max(200).optional(),
   clientId: z.number().int().positive().optional(),
-  mobile: z.string().trim().nullable().optional(),
-  dpClientId: z.string().trim().nullable().optional(),
+  mobile: optionalText,
+  dpClientId: optionalText,
   active: z.boolean().optional(),
 });
+
+const listFilter = z.object({
+  clientId: z.number().int().positive().optional(),
+  q: z.string().trim().optional(),
+  includeInactive: z.boolean().optional(),
+});
+/** Either explicit ids (tickboxes) or "everything matching this filter". */
+const bulkDeleteBody = z.union([
+  z.object({ ids: z.array(z.number().int().positive()).min(1).max(10_000) }),
+  z.object({ filter: listFilter }),
+]);
+const fileDeleteQuery = z.object({ dryRun: z.enum(["true", "false"]).default("true") });
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 const importQuery = z.object({
@@ -62,11 +76,11 @@ const panSelect = {
 } satisfies Prisma.PanSelect;
 
 export async function panRoutes(app: FastifyInstance) {
-  app.get("/", { preHandler: requireLogin }, async (req) => {
-    const { clientId, q, includeInactive, page, pageSize } = listQuery.parse(req.query);
+  /** Shared by the PAN list and "delete everything matching this filter". */
+  function panWhere({ clientId, q, includeInactive }: { clientId?: number; q?: string; includeInactive?: boolean }) {
     const where: Prisma.PanWhereInput = {};
     if (clientId) where.clientId = clientId;
-    if (includeInactive !== "true") where.active = true;
+    if (!includeInactive) where.active = true;
     if (q) {
       // A full PAN is matched exactly through its hash; anything else searches names.
       const asPan = normalizePan(q);
@@ -77,6 +91,25 @@ export async function panRoutes(app: FastifyInstance) {
             { client: { name: { contains: q, mode: "insensitive" } } },
           ];
     }
+    return where;
+  }
+
+  async function deleteAndAudit(req: Parameters<typeof audit>[0], ids: number[], source: string) {
+    const deleted = await deletePans(app.prisma, ids);
+    if (deleted.length) {
+      await audit(req, deleted.length === 1 ? "pan.delete" : "pan.bulk_delete", {
+        entity: "Pan",
+        entityId: deleted.length === 1 ? deleted[0]!.id : undefined,
+        // Masked PANs only; cap the list so a huge delete doesn't bloat the log.
+        details: { source, count: deleted.length, pans: deleted.slice(0, 200).map((d) => d.panMasked) },
+      });
+    }
+    return deleted;
+  }
+
+  app.get("/", { preHandler: requireLogin }, async (req) => {
+    const { clientId, q, includeInactive, page, pageSize } = listQuery.parse(req.query);
+    const where = panWhere({ clientId, q, includeInactive: includeInactive === "true" });
     const [total, pans] = await Promise.all([
       app.prisma.pan.count({ where }),
       app.prisma.pan.findMany({
@@ -116,14 +149,61 @@ export async function panRoutes(app: FastifyInstance) {
     return { pan };
   });
 
-  /** Permanent delete, for client data-removal requests (DPDP). Use PATCH active=false to just hide. */
+  /**
+   * Permanent delete (e.g. client data-removal requests). The full PAN is erased; IPO results
+   * stay in reports with the masked PAN, holder and client. Use PATCH active=false to just pause.
+   */
   app.delete("/:id", { preHandler: requireAdmin }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const existing = await app.prisma.pan.findUnique({ where: { id } });
-    if (!existing) return reply.code(404).send({ error: "PAN not found" });
-    await app.prisma.pan.delete({ where: { id } });
-    await audit(req, "pan.delete", { entity: "Pan", entityId: id, details: { pan: existing.panMasked } });
-    return { ok: true };
+    const deleted = await deleteAndAudit(req, [id], "single");
+    if (!deleted.length) return reply.code(404).send({ error: "PAN not found" });
+    return { ok: true, deleted: deleted.length };
+  });
+
+  /** Bulk delete by tickbox ids, or everything matching the PAN list's current filter. */
+  app.post("/bulk-delete", { preHandler: requireAdmin }, async (req) => {
+    const body = bulkDeleteBody.parse(req.body);
+    const ids =
+      "ids" in body
+        ? body.ids
+        : (await app.prisma.pan.findMany({ where: panWhere(body.filter), select: { id: true } })).map((p) => p.id);
+    const deleted = await deleteAndAudit(req, ids, "ids" in body ? "selection" : "filter");
+    return { deleted: deleted.length };
+  });
+
+  /**
+   * Bulk delete from an uploaded Excel/CSV with a PAN column. dryRun=true (default) previews
+   * which PANs match; dryRun=false deletes the matches.
+   */
+  app.post("/bulk-delete/file", { preHandler: requireAdmin }, async (req, reply) => {
+    const { dryRun } = fileDeleteQuery.parse(req.query);
+    const file = await req.file();
+    if (!file) return reply.code(400).send({ error: "No file uploaded" });
+    let sheet: string[][];
+    try {
+      sheet = await readSheet(await file.toBuffer(), file.filename);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message || "Could not read file" });
+    }
+    const { pans, errors } = parsePanList(sheet);
+    const byHash = new Map(pans.map((p) => [app.vault.hash(p.pan), p]));
+    const found = await app.prisma.pan.findMany({
+      where: { panHash: { in: [...byHash.keys()] } },
+      select: { id: true, panHash: true, panMasked: true, holderName: true, active: true, client: { select: { name: true } } },
+    });
+    const foundHashes = new Set(found.map((f) => f.panHash));
+    const matched = found.map(({ panHash, ...f }) => ({ ...f, rowNumber: byHash.get(panHash)!.rowNumber, clientName: f.client.name }));
+    const notFound = pans.filter((p) => !foundHashes.has(app.vault.hash(p.pan))).map((p) => ({ rowNumber: p.rowNumber, panMasked: maskPan(p.pan) }));
+
+    let deleted = 0;
+    if (dryRun === "false") deleted = (await deleteAndAudit(req, found.map((f) => f.id), `file:${file.filename}`)).length;
+    return {
+      dryRun: dryRun === "true",
+      matched: matched.map(({ client: _c, ...m }) => m),
+      notFound,
+      errors,
+      deleted,
+    };
   });
 
   app.get("/:id/reveal", { preHandler: requireAdmin }, async (req, reply) => {

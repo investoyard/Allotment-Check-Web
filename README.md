@@ -43,8 +43,18 @@ Use **Import** in the UI with an `.xlsx` or `.csv` file. Headers are matched fle
 | DP ID | no | DP ID, Demat, BOID, DP Client ID |
 
 - **Preview** first. Nothing is saved until you click **Import**.
-- Re-importing the same PAN updates that record instead of creating a duplicate.
-- See `samples/pans-template.csv` for an example file.
+- Re-importing the same PAN updates that record instead of creating a duplicate. To bulk-edit names, mobiles or DP IDs, re-upload the corrected file.
+- Click **Download import format** for a ready-made Excel with the right columns.
+- Tick IPOs under "After import, check the new PANs for" and the new PANs are checked as soon as they're imported.
+
+## Editing and deleting PANs (admins)
+- **Edit:** on the PANs page, click **Edit** on a row to change the name, mobile or DP ID.
+- **Delete one:** click **Delete** on its row.
+- **Delete many:**
+  - Tick rows, or tick the header box and click **Select all N matching** to cover every page of the current search or client filter. Then click **Delete selected**.
+  - Or click **Delete from Excel…**, upload a list of PANs (**Download delete format** gives the file), **Preview**, then **Delete matched PANs**.
+- **What deleting does:** it erases the full PAN permanently. Past IPO results are **kept in Reports**, showing the masked PAN, holder name and client, marked "deleted". IPO totals in reports don't change. Full-PAN exports show deleted PANs masked.
+- **Pause instead of deleting:** use **Deactivate**. A deactivated PAN is skipped in checks but kept in full.
 
 ## Checking allotment
 1. On **IPOs**, click **Show live IPOs at all registrars**. Enter the allotment date if you know it, then click **Track**.

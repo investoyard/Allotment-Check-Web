@@ -91,12 +91,19 @@ enum AllotmentStatus {
 }
 
 /// Latest result per IPO × PAN. A PAN with no row here hasn't been checked yet.
+/// When a PAN is deleted its results stay for reports: panId becomes null and the
+/// snapshot fields below (masked PAN, holder, client) are what reports show.
 model CheckResult {
   id             Int             @id @default(autoincrement())
   ipoId          Int
   ipo            Ipo             @relation(fields: [ipoId], references: [id], onDelete: Cascade)
-  panId          Int
-  pan            Pan             @relation(fields: [panId], references: [id], onDelete: Cascade)
+  panId          Int?
+  pan            Pan?            @relation(fields: [panId], references: [id], onDelete: SetNull)
+  /// Snapshot taken when the PAN is deleted (null while the PAN exists)
+  panMasked      String?
+  holderName     String?
+  clientId       Int?
+  clientName     String?
   status         AllotmentStatus
   appliedQty     Int?
   allottedQty    Int?

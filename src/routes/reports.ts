@@ -45,7 +45,9 @@ export async function reportRoutes(app: FastifyInstance) {
     if (fullPan === "true" && req.currentUser!.role !== "ADMIN") return reply.code(403).send({ error: "Only admins can export full PANs" });
 
     const rows = await loadHistory(app.prisma, filters);
-    const panOf = (p: { panMasked: string; panEncrypted: string }) => (fullPan === "true" ? app.vault.open(p.panEncrypted) : p.panMasked);
+    // Deleted PANs have no ciphertext left, so they always export masked.
+    const panOf = (p: { panMasked: string; panEncrypted: string | null }) =>
+      fullPan === "true" && p.panEncrypted ? app.vault.open(p.panEncrypted) : p.panMasked;
     const buf = await historyWorkbook(
       await describe(filters),
       totals(rows),

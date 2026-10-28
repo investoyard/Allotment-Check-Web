@@ -250,7 +250,15 @@ export async function ipoRoutes(app: FastifyInstance) {
 
     const r = await createCheckJob(app.prisma, app.runner, ipo, scope, { userId: req.currentUser!.id });
     if (!r.ok && r.reason === "running") return reply.code(409).send({ error: "A check is already running for this IPO", job: r.job });
-    if (!r.ok) return reply.code(400).send({ error: "No PANs to check for this selection" });
+    if (!r.ok) {
+      const why = {
+        unchecked: "Every active PAN already has a result for this IPO, so nothing is left to check. New uploads are checked automatically; use \"Re-check all\" to check everyone again.",
+        failed: "No PANs have errors for this IPO.",
+        errors: "No PANs have errors or \"not applied\" for this IPO.",
+        all: "There are no active PANs to check. Import PANs first.",
+      }[scope];
+      return reply.code(400).send({ error: why });
+    }
     await audit(req, "ipo.check", { entity: "Ipo", entityId: id, details: { jobId: r.job.id, scope, total: r.job.total } });
     return reply.code(202).send({ job: r.job });
   });

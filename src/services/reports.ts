@@ -15,11 +15,16 @@ export interface HistoryRow {
   registrar: string;
   isSme: boolean;
   ipoDate: Date | null;
-  panId: number;
+  /** null once the PAN has been deleted; the row then comes from the result's snapshot */
+  panId: number | null;
+  /** Groups a person's rows across IPOs, including after deletion */
+  panKey: string;
+  deleted: boolean;
   panMasked: string;
-  panEncrypted: string;
+  /** null for deleted PANs — the full PAN is gone for good */
+  panEncrypted: string | null;
   holderName: string;
-  clientId: number;
+  clientId: number | null;
   clientName: string;
   status: AllotmentStatus;
   appliedQty: number | null;
@@ -46,11 +51,12 @@ export function listingGain(r: Pick<HistoryRow, "status" | "allottedQty" | "issu
 const num = (d: { toString(): string } | null) => (d == null ? null : Number(d));
 
 export interface Tally {
-  key: number;
+  key: string;
   label: string;
   clientName: string;
   panMasked?: string;
-  panEncrypted?: string;
+  panEncrypted?: string | null;
+  deleted?: boolean;
   /** IPOs where an application was found (allotted or not) */
   applied: number;
   allotted: number;
@@ -79,10 +85,11 @@ export function resultWhere(f: ReportFilters): Prisma.CheckResultWhereInput {
     // IPOs without an allotment date are placed by when they were added here.
     ipo.OR = [{ allotmentDate: range }, { allotmentDate: null, createdAt: range }];
   }
+  // History includes every result: active, deactivated and deleted PANs alike.
   return {
     ...(f.ipoId ? { ipoId: f.ipoId } : {}),
     ipo,
-    pan: { active: true, ...(f.clientId ? { clientId: f.clientId } : {}) },
+    ...(f.clientId ? { OR: [{ pan: { clientId: f.clientId } }, { panId: null, clientId: f.clientId }] } : {}),
   };
 }
 
@@ -95,18 +102,24 @@ export async function loadHistory(prisma: PrismaClient, f: ReportFilters): Promi
     },
     orderBy: [{ ipoId: "desc" }, { panId: "asc" }],
   });
-  return results.map((r) => ({
+  return results.map((r) => {
+    const p = r.pan;
+    const panMasked = p?.panMasked ?? r.panMasked ?? "**********";
+    const holderName = p?.holderName ?? r.holderName ?? "(deleted PAN)";
+    return {
     ipoId: r.ipoId,
     ipoName: r.ipo.name,
     registrar: r.ipo.registrar,
     isSme: r.ipo.isSme,
     ipoDate: r.ipo.allotmentDate ?? r.ipo.createdAt,
     panId: r.panId,
-    panMasked: r.pan.panMasked,
-    panEncrypted: r.pan.panEncrypted,
-    holderName: r.pan.holderName,
-    clientId: r.pan.clientId,
-    clientName: r.pan.client.name,
+    panKey: p ? `p${r.panId}` : `d${panMasked}|${holderName}`,
+    deleted: !p,
+    panMasked,
+    panEncrypted: p?.panEncrypted ?? null,
+    holderName,
+    clientId: p?.clientId ?? r.clientId,
+    clientName: p?.client.name ?? r.clientName ?? "",
     status: r.status,
     appliedQty: r.appliedQty,
     allottedQty: r.allottedQty,
@@ -116,21 +129,22 @@ export async function loadHistory(prisma: PrismaClient, f: ReportFilters): Promi
     checkedAt: r.checkedAt,
     issuePrice: num(r.ipo.issuePrice),
     listingPrice: num(r.ipo.listingPrice),
-  }));
+    };
+  });
 }
 
 /** Groups history rows per client or per PAN. Sorted by most IPOs applied, then name. */
 export function tally(rows: HistoryRow[], by: "client" | "pan"): Tally[] {
-  const map = new Map<number, Tally>();
+  const map = new Map<string, Tally>();
   for (const r of rows) {
-    const key = by === "client" ? r.clientId : r.panId;
+    const key = by === "client" ? `c${r.clientId ?? r.clientName}` : r.panKey;
     let t = map.get(key);
     if (!t) {
       t = {
         key,
         label: by === "client" ? r.clientName : r.holderName,
         clientName: r.clientName,
-        ...(by === "pan" ? { panMasked: r.panMasked, panEncrypted: r.panEncrypted } : {}),
+        ...(by === "pan" ? { panMasked: r.panMasked, panEncrypted: r.panEncrypted, deleted: r.deleted } : {}),
         applied: 0, allotted: 0, notAllotted: 0, ratio: null, sharesApplied: 0, sharesAllotted: 0, allottedValue: 0,
         listingGain: 0, gainUnknown: 0, errors: 0,
       };
@@ -161,7 +175,7 @@ export function totals(rows: HistoryRow[]) {
   const allotted = applied.filter((r) => r.status === "ALLOTTED");
   return {
     ipos: new Set(rows.map((r) => r.ipoId)).size,
-    pans: new Set(rows.map((r) => r.panId)).size,
+    pans: new Set(rows.map((r) => r.panKey)).size,
     applications: applied.length,
     allotted: allotted.length,
     ratio: applied.length ? allotted.length / applied.length : null,

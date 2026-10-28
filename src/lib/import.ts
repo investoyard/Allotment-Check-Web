@@ -66,6 +66,26 @@ export async function readSheet(buffer: Buffer, filename: string): Promise<strin
   return Array.from(out, (r) => r ?? []);
 }
 
+/** Reads a sheet that only needs a PAN column (e.g. a list of PANs to delete). */
+export function parsePanList(sheet: string[][]): { pans: { rowNumber: number; pan: string }[]; errors: ImportError[] } {
+  const [header, ...body] = sheet;
+  const col = header?.findIndex((h) => HEADER_ALIASES.pan.includes(normHeader(h))) ?? -1;
+  if (col < 0) return { pans: [], errors: [{ rowNumber: 1, message: "Missing required column: PAN" }] };
+  const pans: { rowNumber: number; pan: string }[] = [];
+  const errors: ImportError[] = [];
+  const seen = new Set<string>();
+  body.forEach((r, i) => {
+    const rowNumber = i + 2;
+    const pan = normalizePan(r[col] ?? "");
+    if (!pan) return;
+    if (!isValidPan(pan)) return void errors.push({ rowNumber, message: "Invalid PAN format" });
+    if (seen.has(pan)) return;
+    seen.add(pan);
+    pans.push({ rowNumber, pan });
+  });
+  return { pans, errors };
+}
+
 /** Turns raw sheet rows (first row = headers) into validated import rows. */
 export function parseRows(sheet: string[][]): ParseResult {
   const [header, ...body] = sheet;

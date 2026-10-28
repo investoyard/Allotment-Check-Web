@@ -21,6 +21,7 @@ import { createRegistry, type Registry } from "./registrars/index.js";
 import { JobRunner } from "./services/jobRunner.js";
 import { Scheduler } from "./services/scheduler.js";
 import { schedulerRoutes } from "./routes/scheduler.js";
+import { templateRoutes } from "./routes/templates.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -84,6 +85,7 @@ export async function buildApp(config: Config, { prisma = new PrismaClient(), re
   await app.register(registrarRoutes, { prefix: "/api/registrars" });
   await app.register(reportRoutes, { prefix: "/api/reports" });
   await app.register(schedulerRoutes, { prefix: "/api/scheduler" });
+  await app.register(templateRoutes, { prefix: "/api/templates" });
 
   await app.register(fastifyStatic, { root: publicDir });
 
