@@ -162,6 +162,28 @@
   .toast { display:flex; align-items:center; gap:9px; background:#0f172a; color:#fff; padding:10px 14px; border-radius:10px; box-shadow:var(--shadow-lg); font-size:13px; animation:tin .18s ease-out; }
   .toast.err { background:var(--bad); }
   @keyframes tin { from { opacity:0; transform:translateY(6px); } }
+  /* Confirmation dialog */
+  #confirm { position:fixed; inset:0; z-index:1002; display:grid; place-items:center; padding:16px; background:rgba(15,23,42,.45);
+    backdrop-filter:blur(2px); animation:fadein .12s ease-out; }
+  #confirm .dlg { width:100%; max-width:440px; background:var(--surface); border-radius:14px; box-shadow:var(--shadow-lg); padding:22px; animation:pop .14s ease-out; }
+  #confirm .dlg-top { display:flex; gap:14px; align-items:flex-start; }
+  #confirm .dlg-icon { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; flex:none; background:var(--accent-soft); color:var(--accent); }
+  #confirm .dlg-icon .ic { width:21px; height:21px; }
+  #confirm.danger .dlg-icon { background:var(--bad-soft); color:var(--bad); }
+  #confirm.warn .dlg-icon { background:var(--warn-soft); color:var(--warn); }
+  #confirm.ok .dlg-icon { background:var(--ok-soft); color:var(--ok); }
+  #confirm h4 { margin:2px 0 6px; font-size:16px; letter-spacing:-.01em; }
+  #confirm .dlg-msg { color:var(--text-2); font-size:14px; }
+  #confirm .dlg-msg .who { display:inline-block; margin-top:6px; padding:6px 10px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); font-weight:600; }
+  #confirm .dlg-note { margin-top:10px; font-size:12.5px; color:var(--muted); }
+  #confirm .dlg-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  #confirm.danger .btn.go { background:var(--bad); border-color:var(--bad); color:#fff; }
+  #confirm.danger .btn.go:hover { background:#991b1b; border-color:#991b1b; }
+  #confirm.warn .btn.go { background:#d97706; border-color:#d97706; color:#fff; }
+  #confirm.warn .btn.go:hover { background:var(--warn); border-color:var(--warn); }
+  #confirm.ok .btn.go { background:var(--ok); border-color:var(--ok); color:#fff; }
+  @keyframes fadein { from { opacity:0; } }
+  @keyframes pop { from { opacity:0; transform:translateY(6px) scale(.98); } }
   .spin { animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
@@ -222,6 +244,18 @@
 
 <div id="tip" role="tooltip"></div>
 <div id="toasts" aria-live="polite"></div>
+<div id="confirm" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle" aria-describedby="dlgMsg">
+  <div class="dlg">
+    <div class="dlg-top">
+      <div class="dlg-icon" id="dlgIcon"></div>
+      <div class="grow"><h4 id="dlgTitle"></h4><div class="dlg-msg" id="dlgMsg"></div><div class="dlg-note hidden" id="dlgNote"></div></div>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="btn" id="dlgCancel">Cancel</button>
+      <button type="button" class="btn primary go" id="dlgOk"></button>
+    </div>
+  </div>
+</div>
 
 <!-- ================= Login ================= -->
 <div id="login" class="hidden">
@@ -523,6 +557,43 @@ function toast(text, kind = "ok") {
   setTimeout(() => t.remove(), 3500);
 }
 
+// ---------- Confirmation dialog ----------
+// confirmDialog({ title, message, who, note, confirm, kind: "danger" | "warn" | "ok" | "primary", icon }) → Promise<boolean>
+let dlgResolve = null, dlgReturnFocus = null;
+function confirmDialog({ title, message = "", who = "", note = "", confirm = "Confirm", kind = "primary", icon }) {
+  const d = $("#confirm");
+  d.className = kind === "primary" ? "" : kind;
+  $("#dlgIcon").innerHTML = ic(icon ?? { danger: "trash", warn: "alert", ok: "check-circle", primary: "info" }[kind]);
+  $("#dlgTitle").textContent = title;
+  $("#dlgMsg").innerHTML = `${esc(message)}${who ? `<div><span class="who">${esc(who)}</span></div>` : ""}`;
+  $("#dlgNote").textContent = note; $("#dlgNote").classList.toggle("hidden", !note);
+  $("#dlgOk").textContent = confirm;
+  dlgReturnFocus = document.activeElement;
+  hideTip();
+  d.classList.remove("hidden");
+  // Destructive actions start on Cancel so a stray Enter can't delete anything.
+  setTimeout(() => (kind === "danger" ? $("#dlgCancel") : $("#dlgOk")).focus(), 0);
+  return new Promise((resolve) => (dlgResolve = resolve));
+}
+function closeDialog(answer) {
+  if (!dlgResolve) return;
+  $("#confirm").classList.add("hidden");
+  const r = dlgResolve; dlgResolve = null;
+  dlgReturnFocus?.focus?.();
+  r(answer);
+}
+$("#dlgOk").addEventListener("click", () => closeDialog(true));
+$("#dlgCancel").addEventListener("click", () => closeDialog(false));
+$("#confirm").addEventListener("mousedown", (e) => { if (e.target.id === "confirm") closeDialog(false); });
+document.addEventListener("keydown", (e) => {
+  if (!dlgResolve) return;
+  if (e.key === "Escape") { e.preventDefault(); closeDialog(false); }
+  if (e.key === "Tab") { // keep focus inside the dialog
+    e.preventDefault();
+    (document.activeElement === $("#dlgOk") ? $("#dlgCancel") : $("#dlgOk")).focus();
+  }
+});
+
 // ---------- Client groups (a client named like its holder isn't a real group) ----------
 const sameName = (a, b) => String(a ?? "").replace(/\s+/g, " ").trim().toLowerCase() === String(b ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 const groupOf = (client, holder) => (sameName(client, holder) ? "" : client);
@@ -616,7 +687,12 @@ $("#loginForm").addEventListener("submit", async (e) => {
     $("#loginPw").select();
   } finally { btn.disabled = false; btn.innerHTML = `<span>Sign in</span>${ic("arrow-right")}`; }
 });
-$("#logout").addEventListener("click", async () => { await api("/api/auth/logout", { method: "POST" }); me = null; showLogin(); });
+$("#logout").addEventListener("click", async () => {
+  const ok = await confirmDialog({ title: "Sign out?", message: "You'll need your username and password to sign in again.",
+    note: "Background checks keep running on the server.", confirm: "Sign out", icon: "logout" });
+  if (!ok) return;
+  await api("/api/auth/logout", { method: "POST" }); me = null; showLogin();
+});
 
 // ---------- Reports ----------
 const pct = (r) => (r == null ? "—" : `${(r * 100).toFixed(1)}%`);
@@ -886,13 +962,20 @@ $("#ipoSave").addEventListener("click", async () => {
 });
 $("#ipoArchive").addEventListener("click", async () => {
   const archived = $("#ipoArchive").dataset.archived !== "true";
-  if (archived && !confirm("Archive this IPO? It disappears from the IPO list and auto-checks stop. Results stay in reports.")) return;
+  const ok = archived
+    ? await confirmDialog({ title: "Archive this IPO?", who: $("#ipoTitle").textContent, kind: "warn", icon: "archive", confirm: "Archive",
+        message: "It's removed from the IPO list and automatic checks stop.", note: "Its results stay in Reports." })
+    : await confirmDialog({ title: "Restore this IPO?", who: $("#ipoTitle").textContent, icon: "archive", confirm: "Restore",
+        message: "It goes back on the IPO list." });
+  if (!ok) return;
   await api(`/api/ipos/${currentIpo}`, { method: "PATCH", body: JSON.stringify({ archived }) });
   toast(archived ? "IPO archived" : "IPO restored");
   show(archived ? "ipos" : "ipo");
 });
 document.querySelectorAll("[data-scope]").forEach((b) => b.addEventListener("click", async () => {
-  if (b.dataset.scope === "all" && !confirm("Re-check every PAN for this IPO?")) return;
+  if (b.dataset.scope === "all" && !(await confirmDialog({ title: "Re-check every PAN?", who: $("#ipoTitle").textContent, icon: "refresh",
+    message: "Every active PAN is checked again with the registrar, replacing current results.",
+    note: "This takes about a second per PAN and runs in the background.", confirm: "Re-check all" }))) return;
   $("#ipoMsg").textContent = "";
   try {
     const { job } = await api(`/api/ipos/${currentIpo}/check`, { method: "POST", body: JSON.stringify({ scope: b.dataset.scope }) });
@@ -901,6 +984,8 @@ document.querySelectorAll("[data-scope]").forEach((b) => b.addEventListener("cli
   } catch (err) { $("#ipoMsg").textContent = err.message; $("#ipoMsg").className = "msg err"; }
 }));
 $("#cancelJob").addEventListener("click", async () => {
+  if (!(await confirmDialog({ title: "Stop this check?", who: $("#ipoTitle").textContent, kind: "warn", icon: "x-circle", confirm: "Stop check",
+    message: "PANs already checked keep their results; the rest stay unchecked.", note: "You can start it again with Check unchecked." }))) return;
   await api(`/api/jobs/${$("#cancelJob").dataset.job}/cancel`, { method: "POST" });
   toast("Check cancelled"); clearTimeout(pollTimer); loadIpo();
 });
@@ -995,7 +1080,9 @@ $("#selAll").addEventListener("click", () => {
 });
 $("#bulkDelete").addEventListener("click", async () => {
   const n = selectAllMatching ? panTotal : selected.size;
-  if (!confirm(`Permanently delete ${n} PAN${n === 1 ? "" : "s"}?\n\nThe full PAN numbers are erased and can't be recovered. Past IPO results stay in Reports (masked PAN and name).`)) return;
+  if (!(await confirmDialog({ title: `Delete ${n} PAN${n === 1 ? "" : "s"} permanently?`, kind: "danger",
+    message: "The full PAN numbers are erased and can't be recovered.",
+    note: "Past IPO results stay in Reports with the masked PAN and name.", confirm: `Delete ${n} PAN${n === 1 ? "" : "s"}` }))) return;
   const body = selectAllMatching ? { filter: panFilter() } : { ids: [...selected] };
   try {
     const { deleted } = await api("/api/pans/bulk-delete", { method: "POST", body: JSON.stringify(body) });
@@ -1030,7 +1117,13 @@ $("#panRows").addEventListener("click", async (e) => {
       setTimeout(() => { cell.textContent = masked; cell.style.color = ""; }, 10000);
     }
     if (d.toggle) {
-      const activate = d.active !== "true";
+      const activate = d.active !== "true", x = panById.get(+d.toggle);
+      const ok = activate
+        ? await confirmDialog({ title: "Activate this PAN?", who: `${x.holderName} · ${x.panMasked}`, kind: "ok", icon: "resume", confirm: "Activate",
+            message: "It will be included in allotment checks again.", note: "New checks for tracked IPOs pick it up as unchecked." })
+        : await confirmDialog({ title: "Deactivate this PAN?", who: `${x.holderName} · ${x.panMasked}`, kind: "warn", icon: "pause", confirm: "Deactivate",
+            message: "It's skipped in allotment checks and hidden from the PAN list.", note: "Nothing is deleted. Tick \"Show inactive\" to find it and activate it again." });
+      if (!ok) return;
       await api(`/api/pans/${d.toggle}`, { method: "PATCH", body: JSON.stringify({ active: activate }) });
       toast(activate ? "PAN activated" : "PAN deactivated"); loadPans();
     }
@@ -1045,7 +1138,9 @@ $("#panRows").addEventListener("click", async (e) => {
     }
     if (d.del) {
       const x = panById.get(+d.del);
-      if (!confirm(`Permanently delete ${x.panMasked} (${x.holderName})?\n\nThe full PAN is erased. Past IPO results stay in Reports.`)) return;
+      if (!(await confirmDialog({ title: "Delete this PAN permanently?", who: `${x.holderName} · ${x.panMasked}`, kind: "danger", confirm: "Delete PAN",
+        message: "The full PAN number is erased and can't be recovered.",
+        note: "Past IPO results stay in Reports with the masked PAN and name. To just pause it, use Deactivate instead." }))) return;
       await api(`/api/pans/${d.del}`, { method: "DELETE" });
       selected.delete(+d.del); toast("PAN deleted"); loadPans();
     }
@@ -1082,8 +1177,11 @@ async function runDeleteFile(dryRun) {
   } catch (err) { $("#delMsg").textContent = err.message; $("#delMsg").className = "msg err"; }
 }
 $("#delPreview").addEventListener("click", () => runDeleteFile(true));
-$("#delCommit").addEventListener("click", () => {
-  if (confirm("Permanently delete the matched PANs? Full PAN numbers can't be recovered; past IPO results stay in Reports.")) runDeleteFile(false);
+$("#delCommit").addEventListener("click", async () => {
+  const n = $("#delResult").querySelectorAll(".tag.error").length;
+  if (await confirmDialog({ title: `Delete ${n} matched PAN${n === 1 ? "" : "s"} permanently?`, kind: "danger", confirm: `Delete ${n} PAN${n === 1 ? "" : "s"}`,
+    who: $("#delFile").files[0]?.name ?? "", message: "The full PAN numbers are erased and can't be recovered.",
+    note: "Past IPO results stay in Reports with the masked PAN and name." })) runDeleteFile(false);
 });
 $("#delFile").addEventListener("change", () => { $("#delCommit").disabled = true; $("#delResult").innerHTML = ""; $("#delMsg").textContent = ""; });
 
@@ -1161,6 +1259,12 @@ async function loadUsers() {
 $("#userRows").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-uid]"); if (!b) return;
   const enable = b.dataset.active !== "true";
+  const who = b.closest("tr").querySelector("td")?.innerText.trim() ?? "";
+  const ok = enable
+    ? await confirmDialog({ title: "Enable this user?", who, kind: "ok", icon: "resume", confirm: "Enable", message: "They'll be able to sign in again." })
+    : await confirmDialog({ title: "Disable this user?", who, kind: "warn", icon: "pause", confirm: "Disable",
+        message: "They won't be able to sign in. Their past actions stay in the audit log.", note: "You can enable them again at any time." });
+  if (!ok) return;
   await api(`/api/users/${b.dataset.uid}`, { method: "PATCH", body: JSON.stringify({ active: enable }) });
   toast(enable ? "User enabled" : "User disabled"); loadUsers();
 });
