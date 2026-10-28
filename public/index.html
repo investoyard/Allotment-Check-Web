@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allotment Checker</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:10px 20px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; }
+  nav { display:flex; gap:4px; flex:1; }
+  nav button { background:none; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; color:var(--muted); font:inherit; }
+  nav button.active { background:#e8efff; color:var(--accent); font-weight:600; }
+  main { padding:20px; max-width:1200px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input, select, button.btn { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  button.btn { cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; }
+  .muted { color:var(--muted); }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#eef; }
+  .tag.create { background:#dcfce7; color:var(--ok); } .tag.update { background:#fef3c7; color:var(--warn); }
+  .tag.unchanged { background:#f3f4f6; color:var(--muted); } .tag.error { background:#fee2e2; color:var(--bad); }
+  .err { color:var(--bad); }
+  .stats { display:flex; gap:24px; } .stats div b { display:block; font-size:22px; }
+  #login { max-width:340px; margin:80px auto; }
+  #login input { width:100%; margin-bottom:10px; }
+  .hidden { display:none !important; }
+  .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<div id="login" class="card hidden">
+  <h2 style="margin-top:0">Sign in</h2>
+  <form id="loginForm">
+    <input name="email" type="email" placeholder="Email" required autocomplete="username">
+    <input name="password" type="password" placeholder="Password" required autocomplete="current-password">
+    <button class="btn primary" style="width:100%">Sign in</button>
+    <p id="loginErr" class="err"></p>
+  </form>
+</div>
+
+<div id="shell" class="hidden">
+  <header>
+    <h1>Allotment Checker</h1>
+    <nav id="nav">
+      <button data-view="pans" class="active">PANs</button>
+      <button data-view="import" data-admin>Import</button>
+      <button data-view="users" data-admin>Users</button>
+      <button data-view="audit" data-admin>Audit log</button>
+    </nav>
+    <span id="me" class="muted"></span>
+    <button class="btn" id="logout">Sign out</button>
+  </header>
+
+  <main>
+    <section id="view-pans">
+      <div class="card row">
+        <input id="q" placeholder="Search name, client or full PAN" style="flex:1;min-width:220px">
+        <select id="clientFilter"><option value="">All clients</option></select>
+        <label class="muted"><input type="checkbox" id="inactive"> Show inactive</label>
+      </div>
+      <div class="card">
+        <div class="muted" id="panCount"></div>
+        <table><thead><tr><th>PAN</th><th>Holder</th><th>Client</th><th>Mobile</th><th>DP / Client ID</th><th></th></tr></thead>
+        <tbody id="panRows"></tbody></table>
+        <div class="pager"><button class="btn" id="prev">‹ Prev</button><span id="pageInfo" class="muted"></span><button class="btn" id="next">Next ›</button></div>
+      </div>
+    </section>
+
+    <section id="view-import" class="hidden">
+      <div class="card">
+        <h3 style="margin-top:0">Import PANs from Excel / CSV</h3>
+        <p class="muted">Required columns: <b>PAN</b>, <b>Name</b>. Optional: <b>Client</b> (or Group / Family), <b>Mobile</b>, <b>DP ID</b>.
+          Without a Client column, each holder becomes their own client. Existing PANs are updated, not duplicated.</p>
+        <div class="row">
+          <input type="file" id="file" accept=".xlsx,.csv">
+          <button class="btn" id="preview">Preview</button>
+          <button class="btn primary" id="commit" disabled>Import</button>
+          <label class="muted hidden" id="skipWrap"><input type="checkbox" id="skipErrors"> Skip rows with errors</label>
+        </div>
+        <p id="importMsg"></p>
+      </div>
+      <div id="importResult" class="hidden">
+        <div class="card stats" id="importStats"></div>
+        <div class="card" id="importErrorsCard"><h4 style="margin-top:0">Errors</h4><table><thead><tr><th>Row</th><th>Problem</th></tr></thead><tbody id="importErrors"></tbody></table></div>
+        <div class="card"><table><thead><tr><th>Row</th><th>Action</th><th>PAN</th><th>Holder</th><th>Client</th><th>Changes</th></tr></thead><tbody id="importRows"></tbody></table></div>
+      </div>
+    </section>
+
+    <section id="view-users" class="hidden">
+      <div class="card">
+        <h3 style="margin-top:0">Add user</h3>
+        <form id="userForm" class="row">
+          <input name="name" placeholder="Name" required>
+          <input name="email" type="email" placeholder="Email" required>
+          <input name="password" type="password" placeholder="Password (10+ chars)" minlength="10" required autocomplete="new-password">
+          <select name="role"><option>OPERATOR</option><option>ADMIN</option></select>
+          <button class="btn primary">Add</button>
+          <span id="userMsg"></span>
+        </form>
+      </div>
+      <div class="card"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div>
+    </section>
+
+    <section id="view-audit" class="hidden">
+      <div class="card"><table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Details</th><th>IP</th></tr></thead><tbody id="auditRows"></tbody></table></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+let me = null, page = 1, pageSize = 50;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { credentials: "same-origin", ...opts,
+    headers: opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json", ...opts.headers } : opts.headers });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && path !== "/api/auth/login") { showLogin(); throw new Error("Not logged in"); }
+  if (!res.ok) { const e = new Error(data.error || res.statusText); e.data = data; throw e; }
+  return data;
+}
+
+function showLogin() { $("#shell").classList.add("hidden"); $("#login").classList.remove("hidden"); }
+function showShell() {
+  $("#login").classList.add("hidden"); $("#shell").classList.remove("hidden");
+  $("#me").textContent = `${me.name} · ${me.role}`;
+  document.querySelectorAll("[data-admin]").forEach((b) => b.classList.toggle("hidden", me.role !== "ADMIN"));
+  show("pans");
+}
+
+function show(view) {
+  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  document.querySelectorAll("main > section").forEach((s) => s.classList.toggle("hidden", s.id !== `view-${view}`));
+  ({ pans: loadPans, users: loadUsers, audit: loadAudit, import: () => {} })[view]();
+}
+
+$("#nav").addEventListener("click", (e) => { if (e.target.dataset.view) show(e.target.dataset.view); });
+
+$("#loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault(); $("#loginErr").textContent = "";
+  const f = new FormData(e.target);
+  try {
+    ({ user: me } = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email: f.get("email"), password: f.get("password") }) }));
+    e.target.reset(); showShell();
+  } catch (err) { $("#loginErr").textContent = err.message; }
+});
+$("#logout").addEventListener("click", async () => { await api("/api/auth/logout", { method: "POST" }); me = null; showLogin(); });
+
+// --- PANs ---
+async function loadClients() {
+  const { clients } = await api("/api/clients");
+  const sel = $("#clientFilter"), cur = sel.value;
+  sel.innerHTML = `<option value="">All clients (${clients.length})</option>` +
+    clients.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.panCount})</option>`).join("");
+  sel.value = cur;
+}
+async function loadPans() {
+  await loadClients();
+  const p = new URLSearchParams({ page, pageSize });
+  if ($("#q").value.trim()) p.set("q", $("#q").value.trim());
+  if ($("#clientFilter").value) p.set("clientId", $("#clientFilter").value);
+  if ($("#inactive").checked) p.set("includeInactive", "true");
+  const { total, pans } = await api(`/api/pans?${p}`);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  $("#panCount").textContent = `${total} PAN${total === 1 ? "" : "s"}`;
+  $("#pageInfo").textContent = `Page ${page} of ${pages}`;
+  $("#prev").disabled = page <= 1; $("#next").disabled = page >= pages;
+  const admin = me.role === "ADMIN";
+  $("#panRows").innerHTML = pans.map((x) => `<tr${x.active ? "" : ' class="muted"'}>
+    <td class="mono" data-pan="${x.id}">${esc(x.panMasked)}</td><td>${esc(x.holderName)}</td><td>${esc(x.client.name)}</td>
+    <td>${esc(x.mobile)}</td><td class="mono">${esc(x.dpClientId)}</td>
+    <td>${admin ? `<button class="btn" data-reveal="${x.id}">Reveal</button>
+      <button class="btn" data-toggle="${x.id}" data-active="${x.active}">${x.active ? "Deactivate" : "Activate"}</button>` : ""}</td></tr>`).join("")
+    || `<tr><td colspan="6" class="muted">No PANs yet${admin ? " — use Import to add them." : "."}</td></tr>`;
+}
+let qTimer;
+$("#q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { page = 1; loadPans(); }, 300); });
+$("#clientFilter").addEventListener("change", () => { page = 1; loadPans(); });
+$("#inactive").addEventListener("change", () => { page = 1; loadPans(); });
+$("#prev").addEventListener("click", () => { page--; loadPans(); });
+$("#next").addEventListener("click", () => { page++; loadPans(); });
+$("#panRows").addEventListener("click", async (e) => {
+  const r = e.target.dataset.reveal, t = e.target.dataset.toggle;
+  if (r) {
+    const { pan } = await api(`/api/pans/${r}/reveal`);
+    const cell = document.querySelector(`[data-pan="${r}"]`); const masked = cell.textContent;
+    cell.textContent = pan; setTimeout(() => (cell.textContent = masked), 10000);
+  }
+  if (t) {
+    await api(`/api/pans/${t}`, { method: "PATCH", body: JSON.stringify({ active: e.target.dataset.active !== "true" }) });
+    loadPans();
+  }
+});
+
+// --- Import ---
+async function runImport(dryRun) {
+  const file = $("#file").files[0];
+  if (!file) { $("#importMsg").textContent = "Choose a file first."; return; }
+  const fd = new FormData(); fd.append("file", file);
+  $("#importMsg").textContent = dryRun ? "Checking file…" : "Importing…";
+  $("#importMsg").className = "";
+  try {
+    const qs = new URLSearchParams({ dryRun, skipErrors: $("#skipErrors").checked });
+    const { plan } = await api(`/api/pans/import?${qs}`, { method: "POST", body: fd });
+    renderPlan(plan);
+    if (dryRun) {
+      $("#importMsg").textContent = "Preview ready — nothing saved yet.";
+      $("#commit").disabled = plan.summary.create + plan.summary.update === 0;
+    } else {
+      $("#importMsg").textContent = `Imported: ${plan.summary.create} added, ${plan.summary.update} updated.`;
+      $("#commit").disabled = true;
+    }
+  } catch (err) {
+    $("#importMsg").textContent = err.message; $("#importMsg").className = "err";
+    if (err.data?.plan) renderPlan(err.data.plan);
+  }
+}
+function renderPlan(plan) {
+  const s = plan.summary;
+  $("#importResult").classList.remove("hidden");
+  $("#importStats").innerHTML = [["New PANs", s.create], ["Updated", s.update], ["Unchanged", s.unchanged], ["New clients", s.newClients], ["Errors", s.errors]]
+    .map(([k, v]) => `<div><b>${v}</b><span class="muted">${k}</span></div>`).join("");
+  $("#importErrorsCard").classList.toggle("hidden", !plan.errors.length);
+  $("#skipWrap").classList.toggle("hidden", !plan.errors.length);
+  $("#importErrors").innerHTML = plan.errors.map((e) => `<tr><td>${e.rowNumber}</td><td class="err">${esc(e.message)}</td></tr>`).join("");
+  $("#importRows").innerHTML = plan.rows.map((r) => `<tr><td>${r.rowNumber}</td><td><span class="tag ${r.action}">${r.action}</span></td>
+    <td class="mono">${esc(r.panMasked)}</td><td>${esc(r.holderName)}</td><td>${esc(r.clientName)}</td><td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("");
+}
+$("#preview").addEventListener("click", () => runImport(true));
+$("#commit").addEventListener("click", () => runImport(false));
+$("#file").addEventListener("change", () => { $("#commit").disabled = true; $("#importResult").classList.add("hidden"); $("#importMsg").textContent = ""; });
+$("#skipErrors").addEventListener("change", () => { $("#commit").disabled = false; });
+
+// --- Users ---
+async function loadUsers() {
+  const { users } = await api("/api/users");
+  $("#userRows").innerHTML = users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role}</td>
+    <td>${u.active ? "Active" : '<span class="muted">Disabled</span>'}</td>
+    <td>${u.id === me.id ? '<span class="muted">you</span>' : `<button class="btn" data-uid="${u.id}" data-active="${u.active}">${u.active ? "Disable" : "Enable"}</button>`}</td></tr>`).join("");
+}
+$("#userRows").addEventListener("click", async (e) => {
+  const id = e.target.dataset.uid; if (!id) return;
+  await api(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify({ active: e.target.dataset.active !== "true" }) });
+  loadUsers();
+});
+$("#userForm").addEventListener("submit", async (e) => {
+  e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
+  try { await api("/api/users", { method: "POST", body: JSON.stringify(f) }); e.target.reset(); $("#userMsg").textContent = "Added."; $("#userMsg").className = ""; loadUsers(); }
+  catch (err) { $("#userMsg").textContent = err.data?.issues?.join("; ") || err.message; $("#userMsg").className = "err"; }
+});
+
+// --- Audit ---
+async function loadAudit() {
+  const { logs } = await api("/api/audit?limit=200");
+  $("#auditRows").innerHTML = logs.map((l) => `<tr><td class="muted">${new Date(l.createdAt).toLocaleString()}</td>
+    <td>${esc(l.user?.name ?? "—")}</td><td class="mono">${esc(l.action)}</td>
+    <td class="muted mono">${esc(l.details ? JSON.stringify(l.details) : "")}</td><td class="muted">${esc(l.ip)}</td></tr>`).join("");
+}
+
+api("/api/auth/me").then(({ user }) => { me = user; showShell(); }).catch(() => showLogin());
+</script>
+</body>
+</html>
