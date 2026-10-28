@@ -23,11 +23,13 @@ IPO allotment checker for client PANs. See [PLAN.md](PLAN.md) for the roadmap.
    ```
    npm run create-admin -- you@example.com "Your Name"
    ```
-6. **Run**
-   ```
-   npm run dev
-   ```
-   Then open http://127.0.0.1:3000.
+6. **Run:** double-click **`start-app.bat`**. It:
+   - applies any database updates,
+   - starts the app,
+   - opens http://localhost:3100 in your browser.
+
+   Keep its window open while you use the app: closing it stops the app and the automatic checks. Double-clicking it again while the app is running just opens the browser.
+   From a terminal, `npm run dev` does the same, with auto-reload while you edit code.
 
 ## Importing PANs
 Use **Import** in the UI with an `.xlsx` or `.csv` file. Headers are matched flexibly:
