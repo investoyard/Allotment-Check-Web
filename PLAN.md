@@ -61,12 +61,18 @@ Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRE
 ## Phases
 | # | Deliverable | Status |
 |---|---|---|
-| 1 | Project setup, Postgres schema, login/roles, client & PAN import from Excel/CSV, encrypted storage, audit log | Code done; needs DB setup |
-| 2 | First adapter (MUFG Intime), job queue, results storage, basic dashboard | |
+| 1 | Project setup, Postgres schema, login/roles, client & PAN import from Excel/CSV, encrypted storage, audit log | Done |
+| 2 | First adapter (MUFG Intime), job queue, results storage, basic dashboard | Done; live PAN check not yet verified |
 | 3 | KFin, Bigshare, BSE adapters + captcha queue screen | |
 | 4 | Excel export + history report with filters | |
 | 5 | Scheduler (auto-run on allotment day), retries, alerts | |
 | 6 | Remaining registrars, IPO calendar, listing P&L | |
+
+## Registrar notes
+- **MUFG Intime** — `in.mpms.mufg.com/Initial_Offer/IPO.aspx`. Page methods `GetDetails` (IPO list),
+  `generateToken` (one-time token, AES-128-CBC encoded with the key from the page's own JS) and
+  `SearchOnPan`. Captcha is present on the page but disabled in its script (as of 2026-10-28).
+  No captcha queue needed for MUFG yet.
 
 ## Risks
 - Registrar sites change often → adapters isolated, easy to patch

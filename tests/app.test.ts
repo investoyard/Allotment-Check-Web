@@ -35,6 +35,12 @@ describe("app", () => {
     ["GET", "/api/audit"],
     ["GET", "/api/pans/1/reveal"],
     ["POST", "/api/pans/import"],
+    ["GET", "/api/ipos"],
+    ["GET", "/api/ipos/1/results"],
+    ["POST", "/api/ipos/1/check"],
+    ["GET", "/api/jobs/1"],
+    ["GET", "/api/registrars"],
+    ["GET", "/api/registrars/mufg/ipos"],
   ] as const)("%s %s requires login", async (method, url) => {
     const res = await app.inject({ method, url });
     expect(res.statusCode).toBe(401);

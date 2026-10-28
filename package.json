@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "gen-keys": "tsx scripts/gen-keys.ts",
-    "create-admin": "tsx scripts/create-admin.ts"
+    "create-admin": "tsx scripts/create-admin.ts",
+    "registrar": "tsx scripts/registrar.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",

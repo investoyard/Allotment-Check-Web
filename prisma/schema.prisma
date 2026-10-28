@@ -22,6 +22,7 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   auditLogs    AuditLog[]
+  checkJobs    CheckJob[]
 }
 
 /// A client or family group that owns one or more PANs.
@@ -51,8 +52,89 @@ model Pan {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  results      CheckResult[]
 
   @@index([clientId])
+}
+
+/// An IPO being tracked. registrarIpoId is the registrar's own id (e.g. MUFG company_id).
+model Ipo {
+  id             Int           @id @default(autoincrement())
+  name           String
+  registrar      String
+  registrarIpoId String
+  isSme          Boolean       @default(false)
+  allotmentDate  DateTime?     @db.Date
+  listingDate    DateTime?     @db.Date
+  archived       Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  results        CheckResult[]
+  jobs           CheckJob[]
+
+  @@unique([registrar, registrarIpoId])
+}
+
+enum AllotmentStatus {
+  ALLOTTED
+  NOT_ALLOTTED
+  NOT_APPLIED
+  ERROR
+}
+
+/// Latest result per IPO × PAN. A PAN with no row here hasn't been checked yet.
+model CheckResult {
+  id             Int             @id @default(autoincrement())
+  ipoId          Int
+  ipo            Ipo             @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  panId          Int
+  pan            Pan             @relation(fields: [panId], references: [id], onDelete: Cascade)
+  status         AllotmentStatus
+  appliedQty     Int?
+  allottedQty    Int?
+  category       String?
+  applicantName  String?
+  price          Decimal?        @db.Decimal(12, 2)
+  amountAdjusted Decimal?        @db.Decimal(14, 2)
+  message        String?
+  /// Registrar response rows (no PAN) — kept for debugging parser changes
+  raw            Json?
+  attempts       Int             @default(1)
+  checkedAt      DateTime        @default(now())
+
+  @@unique([ipoId, panId])
+  @@index([ipoId, status])
+}
+
+enum JobState {
+  QUEUED
+  RUNNING
+  DONE
+  CANCELLED
+  FAILED
+}
+
+model CheckJob {
+  id          Int       @id @default(autoincrement())
+  ipoId       Int
+  ipo         Ipo       @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  state       JobState  @default(QUEUED)
+  /// "all" | "unchecked" | "errors"
+  scope       String
+  /// PAN ids to check, fixed when the job is created
+  panIds      Int[]
+  total       Int
+  done        Int       @default(0)
+  failed      Int       @default(0)
+  error       String?
+  createdById Int?
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  @@index([ipoId])
+  @@index([state])
 }
 
 model AuditLog {

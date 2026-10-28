@@ -15,18 +15,23 @@ import { userRoutes } from "./routes/users.js";
 import { clientRoutes } from "./routes/clients.js";
 import { panRoutes } from "./routes/pans.js";
 import { auditRoutes } from "./routes/audit.js";
+import { ipoRoutes, jobRoutes, registrarRoutes } from "./routes/ipos.js";
+import { createRegistry, type Registry } from "./registrars/index.js";
+import { JobRunner } from "./services/jobRunner.js";
 
 declare module "fastify" {
   interface FastifyInstance {
     config: Config;
     prisma: PrismaClient;
     vault: PanVault;
+    registry: Registry;
+    runner: JobRunner;
   }
 }
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
 
-export async function buildApp(config: Config, prisma = new PrismaClient()) {
+export async function buildApp(config: Config, { prisma = new PrismaClient(), registry = createRegistry() } = {}) {
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -39,7 +44,12 @@ export async function buildApp(config: Config, prisma = new PrismaClient()) {
   app.decorate("config", config);
   app.decorate("prisma", prisma);
   app.decorate("vault", new PanVault(config));
-  app.addHook("onClose", async () => prisma.$disconnect());
+  app.decorate("registry", registry);
+  app.decorate("runner", new JobRunner(prisma, app.vault, registry, app.log));
+  app.addHook("onClose", async () => {
+    app.runner.stop();
+    await prisma.$disconnect();
+  });
 
   await app.register(cookie);
   await app.register(jwt, {
@@ -63,6 +73,9 @@ export async function buildApp(config: Config, prisma = new PrismaClient()) {
   await app.register(clientRoutes, { prefix: "/api/clients" });
   await app.register(panRoutes, { prefix: "/api/pans" });
   await app.register(auditRoutes, { prefix: "/api/audit" });
+  await app.register(ipoRoutes, { prefix: "/api/ipos" });
+  await app.register(jobRoutes, { prefix: "/api/jobs" });
+  await app.register(registrarRoutes, { prefix: "/api/registrars" });
 
   await app.register(fastifyStatic, { root: publicDir });
 
