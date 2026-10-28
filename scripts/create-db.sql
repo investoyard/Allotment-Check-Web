@@ -1,8 +1,13 @@
--- Run once as a Postgres superuser on the existing server (port 5433):
---   D:\Investoyard\.tools\pgsql\bin\psql.exe -p 5433 -U <superuser> -d postgres -f scripts/create-db.sql
--- Replace CHANGE_ME with a strong password and put the same one in .env.
+-- Creates the app's own role and database. Run through scripts/setup-db.ps1, which reads the
+-- password from .env and passes it in as :app_password (so it never sits in this file).
+-- Safe to re-run: it only creates what is missing and resets the password.
 
-CREATE ROLE allotment WITH LOGIN PASSWORD 'CHANGE_ME';
-CREATE DATABASE allotment OWNER allotment;
--- Lets `prisma migrate dev` create its temporary shadow database.
-ALTER ROLE allotment CREATEDB;
+SELECT format('CREATE ROLE allotment WITH LOGIN CREATEDB PASSWORD %L', :'app_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'allotment') \gexec
+
+ALTER ROLE allotment WITH LOGIN CREATEDB PASSWORD :'app_password';
+
+SELECT 'CREATE DATABASE allotment OWNER allotment'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'allotment') \gexec
+
+SELECT 'allotment role and database are ready' AS result;

@@ -8,13 +8,13 @@ IPO allotment checker for client PANs. See [PLAN.md](PLAN.md) for the roadmap.
    ```
    npm install
    ```
-2. **Create the database** on the existing Postgres server (port 5433). Edit the password in
-   `scripts/create-db.sql`, then run it as a Postgres superuser:
-   ```
-   D:\Investoyard\.tools\pgsql\bin\psql.exe -p 5433 -U <superuser> -d postgres -f scripts/create-db.sql
-   ```
-3. **Configure `.env`.** It already has generated keys. Set `DATABASE_URL` to the password you chose.
+2. **Configure `.env`.** It already has generated keys and a database password.
    **Back up `PAN_ENC_KEY` and `PAN_HMAC_KEY`.** If you lose them, the stored PANs can't be read.
+3. **Create the database** on the existing Postgres server (port 5433), as a Postgres superuser.
+   The script reads the password from `.env` and is safe to re-run:
+   ```
+   powershell -ExecutionPolicy Bypass -File scripts\setup-db.ps1 -SuperUser <superuser>
+   ```
 4. **Create tables**
    ```
    npm run db:deploy
