@@ -86,4 +86,5 @@ npm run registrar -- check mufg <ipoId> <PAN>
 ```
 npm test
 npm run typecheck
+npm run test:e2e     # full flow against the real Postgres, in a throwaway schema, with a fake registrar
 ```
