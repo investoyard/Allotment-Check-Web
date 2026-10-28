@@ -1,4 +1,5 @@
 import { createCipheriv } from "node:crypto";
+import { readJson, request, USER_AGENT, type Fetch } from "./http.js";
 import { RetryableError, summarize, toNumber, type ApplicationRow, type CheckResult, type IpoRef, type RegistrarAdapter } from "./types.js";
 import { dataSetRows } from "./xml.js";
 
@@ -12,7 +13,6 @@ import { dataSetRows } from "./xml.js";
 
 const BASE = "https://in.mpms.mufg.com/Initial_Offer";
 const PAGE = `${BASE}/public-issues.html`;
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 
 // Same key/IV the page uses in encVal() — not a secret, it's shipped to every browser.
 const TOKEN_KEY = Buffer.from("8080808080808080", "utf8");
@@ -51,50 +51,34 @@ export function parseIpoList(xml: string): IpoRef[] {
     });
 }
 
-type Fetch = typeof fetch;
-
 export class MufgIntimeAdapter implements RegistrarAdapter {
   id = "mufg";
   name = "MUFG Intime (Link Intime)";
   minDelayMs = 800;
   private cookie: string | null = null;
 
-  constructor(private readonly fetchFn: Fetch = fetch, private readonly timeoutMs = 20_000) {}
+  constructor(private readonly fetchFn: Fetch = fetch) {}
 
   private async call(method: string, body: object = {}): Promise<string> {
-    let res: Response;
-    try {
-      res = await this.fetchFn(`${BASE}/IPO.aspx/${method}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          Accept: "application/json, text/javascript, */*; q=0.01",
-          "X-Requested-With": "XMLHttpRequest",
-          Referer: PAGE,
-          Origin: "https://in.mpms.mufg.com",
-          "User-Agent": USER_AGENT,
-          ...(this.cookie ? { Cookie: this.cookie } : {}),
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-    } catch (err) {
-      throw new RetryableError(`MUFG ${method}: ${(err as Error).message}`);
-    }
-    const setCookie = res.headers.get("set-cookie");
-    const session = setCookie?.match(/ASP\.NET_SessionId=[^;]+/)?.[0];
+    const label = `MUFG ${method}`;
+    const res = await request(this.fetchFn, label, `${BASE}/IPO.aspx/${method}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: PAGE,
+        Origin: "https://in.mpms.mufg.com",
+        "User-Agent": USER_AGENT,
+        ...(this.cookie ? { Cookie: this.cookie } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const session = res.headers.get("set-cookie")?.match(/ASP\.NET_SessionId=[^;]+/)?.[0];
     if (session) this.cookie = session;
 
-    if (res.status >= 500 || res.status === 429) throw new RetryableError(`MUFG ${method}: HTTP ${res.status}`);
-    if (!res.ok) throw new Error(`MUFG ${method}: HTTP ${res.status}`);
-    let json: { d?: unknown };
-    try {
-      json = (await res.json()) as { d?: unknown };
-    } catch {
-      // Overloaded registrar sites often return an HTML error page with 200.
-      throw new RetryableError(`MUFG ${method}: unexpected non-JSON response`);
-    }
-    if (typeof json.d !== "string") throw new RetryableError(`MUFG ${method}: unexpected response shape`);
+    const json = await readJson<{ d?: unknown }>(res, label);
+    if (typeof json.d !== "string") throw new RetryableError(`${label}: unexpected response shape`);
     return json.d;
   }
 

@@ -53,11 +53,19 @@ Use **Import** in the UI with an `.xlsx` or `.csv` file. Headers are matched fle
    - If the server restarts, the check carries on where it stopped.
 3. **Re-check errors / not applied** retries only those PANs. Registrars sometimes publish data in batches on allotment day.
 
-Supported registrars: **MUFG Intime** (Link Intime).
+Supported registrars:
+
+| Registrar | Speed | Notes |
+|---|---|---|
+| MUFG Intime (Link Intime) | ~1 PAN/s | |
+| KFin Technologies | ~1 PAN/s | |
+| Bigshare Services | ~1 PAN / 3 s | Their server rate-limits, so the tool waits whenever it is asked to |
+
+BSE/NSE status pages are not supported. They need a captcha, and they only show the registrar's data, which the tool already fetches directly.
 
 You can test an adapter from the command line without using the database:
 ```
-npm run registrar -- ipos mufg
+npm run registrar -- ipos mufg        (or kfin, bigshare)
 npm run registrar -- check mufg <ipoId> <PAN>
 ```
 

@@ -28,7 +28,8 @@ export async function checkWithRetry(
         const message = ((err as Error).message || "Unknown error").replaceAll(pan, "**********");
         return { result: { ...summarize([]), status: "ERROR", message }, attempts: attempt };
       }
-      await wait(backoff[attempt - 1]!);
+      // If the registrar said how long to wait, wait at least that long.
+      await wait(Math.max(backoff[attempt - 1]!, (err as RetryableError).retryAfterMs ?? 0));
     }
   }
 }

@@ -30,7 +30,12 @@ export interface CheckResult {
 }
 
 /** Thrown for failures worth retrying (network, expired token, site overloaded). */
-export class RetryableError extends Error {}
+export class RetryableError extends Error {
+  /** Set when the registrar told us how long to wait (Retry-After). */
+  constructor(message: string, readonly retryAfterMs?: number) {
+    super(message);
+  }
+}
 
 export interface RegistrarAdapter {
   id: string;

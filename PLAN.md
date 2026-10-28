@@ -63,7 +63,7 @@ Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRE
 |---|---|---|
 | 1 | Project setup, Postgres schema, login/roles, client & PAN import from Excel/CSV, encrypted storage, audit log | Done |
 | 2 | First adapter (MUFG Intime), job queue, results storage, basic dashboard | Done; live PAN check not yet verified |
-| 3 | KFin, Bigshare, BSE adapters + captcha queue screen | |
+| 3 | KFin and Bigshare adapters, Retry-After handling. BSE dropped (see notes). Captcha queue deferred: no supported registrar needs one today | Done; live PAN checks not yet verified |
 | 4 | Excel export + history report with filters | |
 | 5 | Scheduler (auto-run on allotment day), retries, alerts | |
 | 6 | Remaining registrars, IPO calendar, listing P&L | |
@@ -73,6 +73,17 @@ Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRE
   `generateToken` (one-time token, AES-128-CBC encoded with the key from the page's own JS) and
   `SearchOnPan`. Captcha is present on the page but disabled in its script (as of 2026-10-28).
   No captcha queue needed for MUFG yet.
+- **KFin** — React app at `ipostatus.kfintech.com`. IPO list is a JSON literal in its main bundle
+  (found via index.html). Lookup: `GET …execute-api…/prod/api/query?type=pan` with headers
+  `reqparam: <PAN>`, `client_id: <IPO id>`. 404 = no application. No captcha.
+- **Bigshare** — `ipo.bigshareonline.com/IPO_Status.html`. IPO list is the page's `ddlCompany`
+  select. Lookup: `POST Data.aspx/FetchIpodetails` with `SelectionType: "PN"`. No captcha;
+  server rate-limits per IP (429/503 + Retry-After, or `Status: RATELIMIT`), which we honour.
+- **BSE** — not supported. The page shows a captcha but only checks it in the browser, so
+  automating its API means getting around that captcha. It only re-displays registrar data
+  anyway. Revisit only if BSE adds a supported flow.
+- **Captcha queue** — reserved for a registrar that verifies captchas on the server. Build it
+  when one is added.
 
 ## Risks
 - Registrar sites change often → adapters isolated, easy to patch
