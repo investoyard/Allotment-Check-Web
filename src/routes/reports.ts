@@ -31,11 +31,17 @@ export async function reportRoutes(app: FastifyInstance) {
   app.get("/history", async (req) => {
     const { groupBy, ...filters } = historyQuery.parse(req.query);
     const rows = await loadHistory(app.prisma, filters);
+    // Admins see full PANs (as in the IPO results grid); operators and deleted PANs stay masked.
+    const admin = req.currentUser!.role === "ADMIN";
     return {
       totals: totals(rows),
       groupBy,
+      fullPan: admin,
       // Never send ciphertext to the browser.
-      rows: tally(rows, groupBy).map(({ panEncrypted: _e, ...t }) => t),
+      rows: tally(rows, groupBy).map(({ panEncrypted, ...t }) => ({
+        ...t,
+        ...(groupBy === "pan" ? { pan: admin && panEncrypted ? app.vault.open(panEncrypted) : t.panMasked } : {}),
+      })),
     };
   });
 

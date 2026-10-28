@@ -400,6 +400,17 @@ describe.runIf(run)("end to end", () => {
     expect(ipo.counts.ALLOTTED).toBe(1); // New Holder; Holder One is gone from the live list
   });
 
+  it("report shows full PANs to admins only; deleted PANs stay masked", async () => {
+    const asAdmin = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("admin") })).json();
+    const live = asAdmin.rows.find((r: { label: string }) => r.label === "New Holder");
+    const gone = asAdmin.rows.find((r: { label: string }) => r.label === "Holder One");
+    expect(live.pan).toBe("AAAPD0001D");
+    expect(gone).toMatchObject({ deleted: true, pan: "AAAPA****A" });
+    const asOp = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("operator") })).json();
+    expect(asOp.rows.find((r: { label: string }) => r.label === "New Holder").pan).toBe("AAAPD****D");
+    expect(JSON.stringify(asOp)).not.toMatch(/AAAPD0001D|panEncrypted/);
+  });
+
   it("bulk delete by selection, by filter, and from an Excel list (with preview)", async () => {
     const famC = await prisma.client.findFirstOrThrow({ where: { name: "Family C" } });
     const cPans = await prisma.pan.findMany({ where: { clientId: famC.id }, orderBy: { id: "asc" } });
