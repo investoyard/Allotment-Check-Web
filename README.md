@@ -134,6 +134,9 @@ Run these in an **Administrator** PowerShell:
 
 Why not iisnode: it starts and stops Node on demand, which would stop the background checks and the allotment-day scheduler.
 
+## Updating
+After any update, double-click **`update-app.bat`** and click **Yes** on the administrator prompt. It applies database changes and restarts the background app. You don't need to restart the IIS application pool.
+
 ## Running as a service
 `npm run dev` stops when you close the terminal. To keep it running, so auto-checks happen, start it at boot with Windows Task Scheduler:
 - **Action:** `npm.cmd`, **arguments** `start`, **start in** `D:\Claude\AutoCheckAllotment`
