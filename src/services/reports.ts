@@ -116,7 +116,8 @@ export async function loadHistory(prisma: PrismaClient, f: ReportFilters): Promi
     panKey: p ? `p${r.panId}` : `d${panMasked}|${holderName}`,
     deleted: !p,
     panMasked,
-    panEncrypted: p?.panEncrypted ?? null,
+    // Deleted PANs keep their full PAN on the result snapshot (null only for PANs deleted before that existed).
+    panEncrypted: p?.panEncrypted ?? r.panEncrypted ?? null,
     holderName,
     clientId: p?.clientId ?? r.clientId,
     clientName: p?.client.name ?? r.clientName ?? "",

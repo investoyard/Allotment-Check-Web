@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { requireAdmin, requireLogin } from "../auth.js";
+import { requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { istParts } from "../services/scheduler.js";
 
@@ -32,7 +32,7 @@ export async function schedulerRoutes(app: FastifyInstance) {
   });
 
   /** Run a scheduler pass now instead of waiting for the next tick. */
-  app.post("/run", { preHandler: requireAdmin }, async (req) => {
+  app.post("/run", { preHandler: requireLogin }, async (req) => {
     await app.scheduler.tick();
     await audit(req, "scheduler.run");
     return { ok: true, lastTick: app.scheduler.lastTick };

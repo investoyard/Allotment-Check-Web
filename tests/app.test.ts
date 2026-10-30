@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+﻿import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
@@ -33,7 +33,6 @@ describe("app", () => {
     ["GET", "/api/clients"],
     ["GET", "/api/users"],
     ["GET", "/api/audit"],
-    ["GET", "/api/pans/1/reveal"],
     ["POST", "/api/pans/import"],
     ["GET", "/api/ipos"],
     ["GET", "/api/ipos/1/results"],

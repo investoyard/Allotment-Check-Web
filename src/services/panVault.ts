@@ -25,4 +25,9 @@ export class PanVault {
   open(panEncrypted: string) {
     return decrypt(panEncrypted, this.encKey);
   }
+
+  /** PAN to show on screen/in exports: the full PAN, or the masked form when only that survives. */
+  display(p: { panEncrypted: string | null; panMasked: string }) {
+    return p.panEncrypted ? this.open(p.panEncrypted) : p.panMasked;
+  }
 }

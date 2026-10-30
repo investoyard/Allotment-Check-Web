@@ -24,6 +24,7 @@ const createBody = z.object({
 });
 
 const updateBody = z.object({
+  email: loginName.optional(),
   name: z.string().trim().min(1).optional(),
   password: password.optional(),
   role: role.optional(),
@@ -43,7 +44,7 @@ export async function userRoutes(app: FastifyInstance) {
   app.post("/", async (req, reply) => {
     const body = createBody.parse(req.body);
     if (await app.prisma.user.findUnique({ where: { email: body.email } })) {
-      return reply.code(409).send({ error: "A user with this email already exists" });
+      return reply.code(409).send({ error: `Username "${body.email}" is already taken` });
     }
     const user = await app.prisma.user.create({
       data: { email: body.email, name: body.name, role: body.role, passwordHash: await hashPassword(body.password) },
@@ -61,10 +62,14 @@ export async function userRoutes(app: FastifyInstance) {
     }
     const existing = await app.prisma.user.findUnique({ where: { id } });
     if (!existing) return reply.code(404).send({ error: "User not found" });
+    if (body.email && body.email !== existing.email && (await app.prisma.user.findUnique({ where: { email: body.email } }))) {
+      return reply.code(409).send({ error: `Username "${body.email}" is already taken` });
+    }
 
     const user = await app.prisma.user.update({
       where: { id },
       data: {
+        email: body.email,
         name: body.name,
         role: body.role,
         active: body.active,

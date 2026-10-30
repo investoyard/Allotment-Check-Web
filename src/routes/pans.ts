@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { requireAdmin, requireLogin } from "../auth.js";
+import { requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { parsePanList, parseRows, readSheet } from "../lib/import.js";
 import { isValidPan, maskPan, normalizePan } from "../lib/pan.js";
@@ -72,8 +72,14 @@ const panSelect = {
   active: true,
   createdAt: true,
   updatedAt: true,
+  panEncrypted: true,
   client: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.PanSelect;
+
+/** Full PAN for the browser; the ciphertext stays on the server. */
+function withPan(vault: { open(c: string): string }, { panEncrypted, ...p }: Prisma.PanGetPayload<{ select: typeof panSelect }>) {
+  return { ...p, pan: vault.open(panEncrypted) };
+}
 
 export async function panRoutes(app: FastifyInstance) {
   /** Shared by the PAN list and "delete everything matching this filter". */
@@ -120,10 +126,10 @@ export async function panRoutes(app: FastifyInstance) {
         take: pageSize,
       }),
     ]);
-    return { total, page, pageSize, pans };
+    return { total, page, pageSize, pans: pans.map((x) => withPan(app.vault, x)) };
   });
 
-  app.post("/", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/", { preHandler: requireLogin }, async (req, reply) => {
     const body = createBody.parse(req.body);
     const sealed = app.vault.seal(body.pan);
     if (await app.prisma.pan.findUnique({ where: { panHash: sealed.panHash } })) {
@@ -137,23 +143,23 @@ export async function panRoutes(app: FastifyInstance) {
       select: panSelect,
     });
     await audit(req, "pan.create", { entity: "Pan", entityId: pan.id, details: { pan: pan.panMasked } });
-    return reply.code(201).send({ pan });
+    return reply.code(201).send({ pan: withPan(app.vault, pan) });
   });
 
-  app.patch("/:id", { preHandler: requireAdmin }, async (req, reply) => {
+  app.patch("/:id", { preHandler: requireLogin }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = updateBody.parse(req.body);
     if (!(await app.prisma.pan.findUnique({ where: { id } }))) return reply.code(404).send({ error: "PAN not found" });
     const pan = await app.prisma.pan.update({ where: { id }, data: body, select: panSelect });
     await audit(req, "pan.update", { entity: "Pan", entityId: id, details: { pan: pan.panMasked, changed: Object.keys(body) } });
-    return { pan };
+    return { pan: withPan(app.vault, pan) };
   });
 
   /**
-   * Permanent delete (e.g. client data-removal requests). The full PAN is erased; IPO results
-   * stay in reports with the masked PAN, holder and client. Use PATCH active=false to just pause.
+   * Removes a PAN from the list and future checks. Its IPO results stay in reports with the full PAN,
+   * holder and client (kept on the results). Use PATCH active=false to just pause it.
    */
-  app.delete("/:id", { preHandler: requireAdmin }, async (req, reply) => {
+  app.delete("/:id", { preHandler: requireLogin }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const deleted = await deleteAndAudit(req, [id], "single");
     if (!deleted.length) return reply.code(404).send({ error: "PAN not found" });
@@ -161,7 +167,7 @@ export async function panRoutes(app: FastifyInstance) {
   });
 
   /** Bulk delete by tickbox ids, or everything matching the PAN list's current filter. */
-  app.post("/bulk-delete", { preHandler: requireAdmin }, async (req) => {
+  app.post("/bulk-delete", { preHandler: requireLogin }, async (req) => {
     const body = bulkDeleteBody.parse(req.body);
     const ids =
       "ids" in body
@@ -175,7 +181,7 @@ export async function panRoutes(app: FastifyInstance) {
    * Bulk delete from an uploaded Excel/CSV with a PAN column. dryRun=true (default) previews
    * which PANs match; dryRun=false deletes the matches.
    */
-  app.post("/bulk-delete/file", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/bulk-delete/file", { preHandler: requireLogin }, async (req, reply) => {
     const { dryRun } = fileDeleteQuery.parse(req.query);
     const file = await req.file();
     if (!file) return reply.code(400).send({ error: "No file uploaded" });
@@ -192,8 +198,11 @@ export async function panRoutes(app: FastifyInstance) {
       select: { id: true, panHash: true, panMasked: true, holderName: true, active: true, client: { select: { name: true } } },
     });
     const foundHashes = new Set(found.map((f) => f.panHash));
-    const matched = found.map(({ panHash, ...f }) => ({ ...f, rowNumber: byHash.get(panHash)!.rowNumber, clientName: f.client.name }));
-    const notFound = pans.filter((p) => !foundHashes.has(app.vault.hash(p.pan))).map((p) => ({ rowNumber: p.rowNumber, panMasked: maskPan(p.pan) }));
+    const matched = found.map(({ panHash, ...f }) => {
+      const src = byHash.get(panHash)!;
+      return { ...f, pan: src.pan, rowNumber: src.rowNumber, clientName: f.client.name };
+    });
+    const notFound = pans.filter((p) => !foundHashes.has(app.vault.hash(p.pan))).map((p) => ({ rowNumber: p.rowNumber, pan: p.pan, panMasked: maskPan(p.pan) }));
 
     let deleted = 0;
     if (dryRun === "false") deleted = (await deleteAndAudit(req, found.map((f) => f.id), `file:${file.filename}`)).length;
@@ -206,21 +215,13 @@ export async function panRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/:id/reveal", { preHandler: requireAdmin }, async (req, reply) => {
-    const { id } = idParam.parse(req.params);
-    const existing = await app.prisma.pan.findUnique({ where: { id } });
-    if (!existing) return reply.code(404).send({ error: "PAN not found" });
-    await audit(req, "pan.reveal", { entity: "Pan", entityId: id, details: { pan: existing.panMasked } });
-    reply.header("Cache-Control", "no-store");
-    return { pan: app.vault.open(existing.panEncrypted) };
-  });
 
   /**
    * Upload .xlsx/.csv. dryRun=true (default) returns a preview of what would change;
    * dryRun=false applies it (invalid rows are skipped only with skipErrors=true).
    * Required columns: PAN, Name. Optional: Client/Group, Mobile, DP ID.
    */
-  app.post("/import", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/import", { preHandler: requireLogin }, async (req, reply) => {
     const { dryRun, skipErrors, checkIpoIds } = importQuery.parse(req.query);
     const file = await req.file();
     if (!file) return reply.code(400).send({ error: "No file uploaded" });

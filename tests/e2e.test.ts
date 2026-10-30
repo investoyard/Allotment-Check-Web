@@ -109,14 +109,19 @@ describe.runIf(run)("end to end", () => {
     expect(raw.every((p) => !p.panEncrypted.includes("AAAP") && p.panMasked.includes("****"))).toBe(true);
   });
 
-  it("operators can't import or reveal; admins can reveal (audited)", async () => {
-    const op = await app.inject({ method: "POST", url: "/api/pans/import", ...as("operator"), ...multipart("pans.csv", CSV) });
-    expect(op.statusCode).toBe(403);
+  it("operators have every right except Users and Audit log; PANs are shown in full", async () => {
+    const op = await app.inject({ method: "POST", url: "/api/pans/import?dryRun=true", ...as("operator"), ...multipart("pans.csv", CSV) });
+    expect(op.statusCode).toBe(200);
+    expect(op.json().plan.rows[0]).toMatchObject({ pan: "AAAPA0001A" });
+    const list = (await app.inject({ url: "/api/pans", ...as("operator") })).json();
+    expect(list.pans.map((p: { pan: string }) => p.pan)).toContain("AAAPA0001A");
+    expect(JSON.stringify(list)).not.toContain("panEncrypted");
+    for (const url of ["/api/users", "/api/audit"]) {
+      expect((await app.inject({ url, ...as("operator") })).statusCode).toBe(403);
+      expect((await app.inject({ url, ...as("admin") })).statusCode).toBe(200);
+    }
     const pan = await prisma.pan.findFirstOrThrow({ where: { holderName: "Holder One" } });
-    expect((await app.inject({ url: `/api/pans/${pan.id}/reveal`, ...as("operator") })).statusCode).toBe(403);
-    const reveal = await app.inject({ url: `/api/pans/${pan.id}/reveal`, ...as("admin") });
-    expect(reveal.json().pan).toBe("AAAPA0001A");
-    expect(await prisma.auditLog.count({ where: { action: "pan.reveal" } })).toBe(1);
+    expect((await app.inject({ url: `/api/pans/${pan.id}/reveal`, ...as("admin") })).statusCode).toBe(404); // no longer needed
   });
 
   it("finds a PAN by exact search", async () => {
@@ -157,15 +162,12 @@ describe.runIf(run)("end to end", () => {
     expect(none.statusCode).toBe(400); // nothing left unchecked
   });
 
-  it("results grid: admins see full PANs, operators masked; search by full PAN", async () => {
-    const asAdmin = (await app.inject({ url: `/api/ipos/${ipoId}/results?status=ALLOTTED`, ...as("admin") })).json();
-    expect(asAdmin.fullPan).toBe(true);
-    expect(asAdmin.rows[0]).toMatchObject({ pan: "AAAPA0001A", panMasked: "AAAPA****A" });
-    const asOp = (await app.inject({ url: `/api/ipos/${ipoId}/results?status=ALLOTTED`, ...as("operator") })).json();
-    expect(asOp.fullPan).toBe(false);
-    expect(asOp.rows[0].pan).toBe("AAAPA****A");
-    expect(JSON.stringify(asOp)).not.toContain("AAAPA0001A");
-    expect(JSON.stringify(asOp)).not.toContain("panEncrypted");
+  it("results grid shows full PANs to everyone; search by full PAN", async () => {
+    for (const who of ["admin", "operator"] as const) {
+      const res = (await app.inject({ url: `/api/ipos/${ipoId}/results?status=ALLOTTED`, ...as(who) })).json();
+      expect(res.rows[0]).toMatchObject({ pan: "AAAPA0001A" });
+      expect(JSON.stringify(res)).not.toContain("panEncrypted");
+    }
     const byPan = (await app.inject({ url: `/api/ipos/${ipoId}/results?q=aaapb0002b`, ...as("operator") })).json();
     expect(byPan.rows.map((r: { holderName: string }) => r.holderName)).toEqual(["Holder Two"]);
   });
@@ -182,18 +184,16 @@ describe.runIf(run)("end to end", () => {
     return wb;
   }
 
-  it("exports IPO results; full PANs only for admins", async () => {
+  it("exports IPO results with full PANs for everyone (audited)", async () => {
     const op = await app.inject({ url: `/api/ipos/${ipoId}/export`, ...as("operator") });
     expect(op.statusCode).toBe(200);
     expect(op.headers["content-disposition"]).toMatch(/attachment; filename="Fake Ltd - IPO allotment \d{4}-\d{2}-\d{2}\.xlsx"/);
     const wb = await readXlsx(op.rawPayload);
-    const pans = wb.getWorksheet("Results")!.getColumn(3).values.slice(2);
-    expect(pans.every((p) => String(p).includes("****"))).toBe(true);
-
-    expect((await app.inject({ url: `/api/ipos/${ipoId}/export?fullPan=true`, ...as("operator") })).statusCode).toBe(403);
-    const full = await readXlsx((await app.inject({ url: `/api/ipos/${ipoId}/export?fullPan=true`, ...as("admin") })).rawPayload);
-    expect(full.getWorksheet("Results")!.getColumn(3).values).toContain("AAAPA0001A");
-    expect(await prisma.auditLog.count({ where: { action: "export.ipo" } })).toBe(2);
+    const res = wb.getWorksheet("Results")!;
+    const panCol = (res.getRow(1).values as unknown[]).indexOf("PAN");
+    expect(res.getColumn(panCol).values).toContain("AAAPA0001A");
+    expect(JSON.stringify(res.getSheetValues())).not.toContain("****");
+    expect(await prisma.auditLog.count({ where: { action: "export.ipo" } })).toBe(1);
   });
 
   it("history report and export", async () => {
@@ -229,11 +229,12 @@ describe.runIf(run)("end to end", () => {
   const today = istParts(new Date()).date;
   const noonIst = () => new Date(`${today}T06:30:00Z`);
 
-  it("operators can set dates and auto-check, but not archive", async () => {
+  it("operators can set dates, auto-check and archive/restore IPOs", async () => {
     const ok = await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { allotmentDate: today, autoCheck: false } });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().ipo).toMatchObject({ autoCheck: false });
-    expect((await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { archived: true } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { archived: true } })).json().ipo.archived).toBe(true);
+    expect((await app.inject({ method: "PATCH", url: `/api/ipos/${ipoId}`, ...as("operator"), payload: { archived: false } })).json().ipo.archived).toBe(false);
   });
 
   it("scheduler ignores IPOs with auto-check off, and does nothing outside hours", async () => {
@@ -366,10 +367,10 @@ describe.runIf(run)("end to end", () => {
     const res = await app.inject({ method: "PATCH", url: `/api/pans/${pan.id}`, ...as("admin"), payload: { holderName: "Holder Two Edited", mobile: "9111111111", dpClientId: "" } });
     expect(res.statusCode).toBe(200);
     expect(res.json().pan).toMatchObject({ holderName: "Holder Two Edited", mobile: "9111111111", dpClientId: null });
-    expect((await app.inject({ method: "PATCH", url: `/api/pans/${pan.id}`, ...as("operator"), payload: { holderName: "x" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "PATCH", url: `/api/pans/${pan.id}`, ...as("operator"), payload: { mobile: "9222222222" } })).json().pan.mobile).toBe("9222222222");
   });
 
-  it("deleting PANs keeps their IPO history in reports, masked", async () => {
+  it("deleting PANs keeps their IPO history in reports, with the full PAN", async () => {
     const one = await prisma.pan.findFirstOrThrow({ where: { holderName: "Holder One" } }); // allotted 28 in Fake IPO
     const before = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}`, ...as("operator") })).json().totals;
 
@@ -377,38 +378,40 @@ describe.runIf(run)("end to end", () => {
     expect(await prisma.pan.findUnique({ where: { id: one.id } })).toBeNull();
     const kept = await prisma.checkResult.findFirstOrThrow({ where: { ipoId, holderName: "Holder One" } });
     expect(kept).toMatchObject({ panId: null, panMasked: "AAAPA****A", clientName: "Family A", status: "ALLOTTED" });
+    expect(kept.panEncrypted).toBeTruthy();
+    expect(kept.panEncrypted).not.toContain("AAAPA0001A"); // still encrypted at rest
 
     // Report totals for the IPO are unchanged; the PAN shows as deleted.
     const after = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("operator") })).json();
     expect(after.totals).toMatchObject({ applications: before.applications, allotted: before.allotted, sharesAllotted: before.sharesAllotted });
-    expect(after.rows.find((r: { label: string }) => r.label === "Holder One")).toMatchObject({ deleted: true, panMasked: "AAAPA****A", allotted: 1 });
+    expect(after.rows.find((r: { label: string }) => r.label === "Holder One")).toMatchObject({ deleted: true, pan: "AAAPA0001A", allotted: 1 });
     // Client filter still finds it through the snapshot.
     const famA = await prisma.client.findFirstOrThrow({ where: { name: "Family A" } });
     const byClient = (await app.inject({ url: `/api/reports/history?clientId=${famA.id}&groupBy=pan`, ...as("operator") })).json();
     expect(byClient.rows.map((r: { label: string }) => r.label)).toContain("Holder One");
 
-    // Full-PAN export can't resurrect it: it stays masked.
+    // The export shows the deleted PAN in full too.
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load((await app.inject({ url: `/api/reports/history/export?fullPan=true&ipoId=${ipoId}`, ...as("admin") })).rawPayload as unknown as ArrayBuffer);
+    await wb.xlsx.load((await app.inject({ url: `/api/reports/history/export?ipoId=${ipoId}`, ...as("operator") })).rawPayload as unknown as ArrayBuffer);
     const detail = JSON.stringify(wb.getWorksheet("Detail")!.getSheetValues());
     expect(detail).toContain("Holder One (deleted)");
-    expect(detail).not.toContain("AAAPA0001A");
-    expect(detail).toContain("AAAPB0002B"); // live PANs still export in full
+    expect(detail).toContain("AAAPA0001A");
+    expect(detail).toContain("AAAPB0002B");
 
     // The IPO page only counts live PANs.
     const ipo = (await app.inject({ url: `/api/ipos/${ipoId}`, ...as("operator") })).json().ipo;
     expect(ipo.counts.ALLOTTED).toBe(1); // New Holder; Holder One is gone from the live list
   });
 
-  it("report shows full PANs to admins only; deleted PANs stay masked", async () => {
-    const asAdmin = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("admin") })).json();
-    const live = asAdmin.rows.find((r: { label: string }) => r.label === "New Holder");
-    const gone = asAdmin.rows.find((r: { label: string }) => r.label === "Holder One");
-    expect(live.pan).toBe("AAAPD0001D");
-    expect(gone).toMatchObject({ deleted: true, pan: "AAAPA****A" });
-    const asOp = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("operator") })).json();
-    expect(asOp.rows.find((r: { label: string }) => r.label === "New Holder").pan).toBe("AAAPD****D");
-    expect(JSON.stringify(asOp)).not.toMatch(/AAAPD0001D|panEncrypted/);
+  it("report shows full PANs to everyone; only PANs deleted before full-PAN history existed stay masked", async () => {
+    const res = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("operator") })).json();
+    expect(res.rows.find((r: { label: string }) => r.label === "New Holder").pan).toBe("AAAPD0001D");
+    expect(res.rows.find((r: { label: string }) => r.label === "Holder One")).toMatchObject({ deleted: true, pan: "AAAPA0001A" });
+    expect(JSON.stringify(res)).not.toContain("panEncrypted");
+    // A PAN deleted by an older version has no full PAN left: it falls back to masked.
+    await prisma.checkResult.updateMany({ where: { ipoId, holderName: "Holder One" }, data: { panEncrypted: null } });
+    const old = (await app.inject({ url: `/api/reports/history?ipoId=${ipoId}&groupBy=pan`, ...as("operator") })).json();
+    expect(old.rows.find((r: { label: string }) => r.label === "Holder One").pan).toBe("AAAPA****A");
   });
 
   it("bulk delete by selection, by filter, and from an Excel list (with preview)", async () => {
@@ -421,13 +424,12 @@ describe.runIf(run)("end to end", () => {
 
     const csv = ["PAN", "AAAPE0002E", "aaapf0003f", "ZZZPZ9999Z", "BAD"].join("\n");
     const preview = (await app.inject({ method: "POST", url: "/api/pans/bulk-delete/file?dryRun=true", ...as("admin"), ...multipart("del.csv", csv) })).json();
-    expect(preview.matched.map((m: { panMasked: string }) => m.panMasked).sort()).toEqual(["AAAPE****E", "AAAPF****F"]);
-    expect(preview.notFound).toEqual([{ rowNumber: 4, panMasked: "ZZZPZ****Z" }]);
+    expect(preview.matched.map((m: { pan: string }) => m.pan).sort()).toEqual(["AAAPE0002E", "AAAPF0003F"]);
+    expect(preview.notFound).toEqual([{ rowNumber: 4, pan: "ZZZPZ9999Z", panMasked: "ZZZPZ****Z" }]);
     expect(preview.errors).toEqual([{ rowNumber: 5, message: "Invalid PAN format" }]);
     expect(await prisma.pan.count({ where: { clientId: famC.id } })).toBe(2); // preview deletes nothing
 
-    expect((await app.inject({ method: "POST", url: "/api/pans/bulk-delete/file?dryRun=false", ...as("operator"), ...multipart("del.csv", csv) })).statusCode).toBe(403);
-    const done = (await app.inject({ method: "POST", url: "/api/pans/bulk-delete/file?dryRun=false", ...as("admin"), ...multipart("del.csv", csv) })).json();
+    const done = (await app.inject({ method: "POST", url: "/api/pans/bulk-delete/file?dryRun=false", ...as("operator"), ...multipart("del.csv", csv) })).json();
     expect(done.deleted).toBe(2);
     expect(await prisma.pan.count({ where: { clientId: famC.id } })).toBe(0);
 
@@ -465,8 +467,33 @@ describe.runIf(run)("end to end", () => {
     expect(local.cookies.find((c) => c.name === "aca_token")!.secure).toBeFalsy();
   });
 
-  it("only admins can trigger the scheduler manually", async () => {
-    expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("operator") })).statusCode).toBe(403);
+  it("admins can edit users: name, username, role and password", async () => {
+    const opUser = await prisma.user.findFirstOrThrow({ where: { email: "operator@e2e.test" } });
+    const adminUser = await prisma.user.findFirstOrThrow({ where: { email: "admin@e2e.test" } });
+
+    expect((await app.inject({ method: "PATCH", url: `/api/users/${opUser.id}`, ...as("operator"), payload: { name: "x" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "PATCH", url: `/api/users/${opUser.id}`, ...as("admin"), payload: { email: "admin@e2e.test" } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "PATCH", url: `/api/users/${adminUser.id}`, ...as("admin"), payload: { role: "OPERATOR" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "PATCH", url: `/api/users/${opUser.id}`, ...as("admin"), payload: { password: "short" } })).statusCode).toBe(400);
+
+    const res = await app.inject({ method: "PATCH", url: `/api/users/${opUser.id}`, ...as("admin"),
+      payload: { name: "Op Renamed", email: "Op.Renamed", role: "ADMIN", password: "new-password-456" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user).toMatchObject({ name: "Op Renamed", email: "op.renamed", role: "ADMIN" });
+    expect(JSON.stringify(res.json())).not.toContain("passwordHash");
+
+    // New username + password work; the old ones don't.
+    expect((await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "op.renamed", password: "new-password-456" } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "operator@e2e.test", password: "e2e-password-123" } })).statusCode).toBe(401);
+    expect(await prisma.auditLog.count({ where: { action: "user.update", entityId: String(opUser.id) } })).toBeGreaterThanOrEqual(1);
+
+    // Put things back for any later tests.
+    await app.inject({ method: "PATCH", url: `/api/users/${opUser.id}`, ...as("admin"),
+      payload: { name: "Op", email: "operator@e2e.test", role: "OPERATOR", password: "e2e-password-123" } });
+  });
+
+  it("anyone signed in can trigger the scheduler manually", async () => {
+    expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("operator") })).statusCode).toBe(200);
     expect((await app.inject({ method: "POST", url: "/api/scheduler/run", ...as("admin") })).statusCode).toBe(200);
   });
 });

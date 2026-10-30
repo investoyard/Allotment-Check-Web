@@ -171,25 +171,25 @@
   .toast.err { background:var(--bad); }
   @keyframes tin { from { opacity:0; transform:translateY(6px); } }
   /* Confirmation dialog */
-  #confirm { position:fixed; inset:0; z-index:1002; display:grid; place-items:center; padding:16px; background:rgba(15,23,42,.45);
+  .modal { position:fixed; inset:0; z-index:1002; display:grid; place-items:center; padding:16px; background:rgba(15,23,42,.45);
     backdrop-filter:blur(2px); animation:fadein .12s ease-out; }
-  #confirm .dlg { width:100%; max-width:440px; background:var(--surface); border-radius:14px; box-shadow:var(--shadow-lg); padding:22px; animation:pop .14s ease-out; }
-  #confirm .dlg-top { display:flex; gap:14px; align-items:flex-start; }
-  #confirm .dlg-icon { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; flex:none; background:var(--accent-soft); color:var(--accent); }
-  #confirm .dlg-icon .ic { width:21px; height:21px; }
-  #confirm.danger .dlg-icon { background:var(--bad-soft); color:var(--bad); }
-  #confirm.warn .dlg-icon { background:var(--warn-soft); color:var(--warn); }
-  #confirm.ok .dlg-icon { background:var(--ok-soft); color:var(--ok); }
-  #confirm h4 { margin:2px 0 6px; font-size:16px; letter-spacing:-.01em; }
-  #confirm .dlg-msg { color:var(--text-2); font-size:14px; }
-  #confirm .dlg-msg .who { display:inline-block; margin-top:6px; padding:6px 10px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); font-weight:600; }
-  #confirm .dlg-note { margin-top:10px; font-size:12.5px; color:var(--muted); }
-  #confirm .dlg-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
-  #confirm.danger .btn.go { background:var(--bad); border-color:var(--bad); color:#fff; }
-  #confirm.danger .btn.go:hover { background:#991b1b; border-color:#991b1b; }
-  #confirm.warn .btn.go { background:#d97706; border-color:#d97706; color:#fff; }
-  #confirm.warn .btn.go:hover { background:var(--warn); border-color:var(--warn); }
-  #confirm.ok .btn.go { background:var(--ok); border-color:var(--ok); color:#fff; }
+  .modal .dlg { width:100%; max-width:440px; background:var(--surface); border-radius:14px; box-shadow:var(--shadow-lg); padding:22px; animation:pop .14s ease-out; }
+  .modal .dlg-top { display:flex; gap:14px; align-items:flex-start; }
+  .modal .dlg-icon { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; flex:none; background:var(--accent-soft); color:var(--accent); }
+  .modal .dlg-icon .ic { width:21px; height:21px; }
+  .modal.danger .dlg-icon { background:var(--bad-soft); color:var(--bad); }
+  .modal.warn .dlg-icon { background:var(--warn-soft); color:var(--warn); }
+  .modal.ok .dlg-icon { background:var(--ok-soft); color:var(--ok); }
+  .modal h4 { margin:2px 0 6px; font-size:16px; letter-spacing:-.01em; }
+  .modal .dlg-msg { color:var(--text-2); font-size:14px; }
+  .modal .dlg-msg .who { display:inline-block; margin-top:6px; padding:6px 10px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); font-weight:600; }
+  .modal .dlg-note { margin-top:10px; font-size:12.5px; color:var(--muted); }
+  .modal .dlg-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  .modal.danger .btn.go { background:var(--bad); border-color:var(--bad); color:#fff; }
+  .modal.danger .btn.go:hover { background:#991b1b; border-color:#991b1b; }
+  .modal.warn .btn.go { background:#d97706; border-color:#d97706; color:#fff; }
+  .modal.warn .btn.go:hover { background:var(--warn); border-color:var(--warn); }
+  .modal.ok .btn.go { background:var(--ok); border-color:var(--ok); color:#fff; }
   @keyframes fadein { from { opacity:0; } }
   @keyframes pop { from { opacity:0; transform:translateY(6px) scale(.98); } }
   .spin { animation:spin .8s linear infinite; }
@@ -252,7 +252,27 @@
 
 <div id="tip" role="tooltip"></div>
 <div id="toasts" aria-live="polite"></div>
-<div id="confirm" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle" aria-describedby="dlgMsg">
+<div id="userDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="udTitle">
+  <form class="dlg" id="userEditForm" novalidate>
+    <div class="dlg-top">
+      <div class="dlg-icon"><svg class="ic"><use href="#i-pencil"/></svg></div>
+      <div class="grow"><h4 id="udTitle">Edit user</h4><div class="dlg-msg">Change details, or set a new password.</div></div>
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
+      <label class="fld">Name<input name="name" required></label>
+      <label class="fld">Username<input name="email" required autocomplete="off"></label>
+      <label class="fld">Role<select name="role"><option value="OPERATOR">Operator</option><option value="ADMIN">Admin</option></select></label>
+      <label class="fld">New password<input name="password" type="password" placeholder="Leave blank to keep current" autocomplete="new-password"></label>
+    </div>
+    <div class="dlg-note hidden" id="udSelfNote">You can't change your own role.</div>
+    <div class="msg err" id="udMsg" style="margin-top:8px"></div>
+    <div class="dlg-actions">
+      <button type="button" class="btn" id="udCancel">Cancel</button>
+      <button type="submit" class="btn primary" id="udSave"><svg class="ic"><use href="#i-save"/></svg>Save changes</button>
+    </div>
+  </form>
+</div>
+<div id="confirm" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle" aria-describedby="dlgMsg">
   <div class="dlg">
     <div class="dlg-top">
       <div class="dlg-icon" id="dlgIcon"></div>
@@ -302,8 +322,8 @@
       <button data-view="ipos" class="active"><svg class="ic"><use href="#i-trend"/></svg>IPOs</button>
       <button data-view="reports"><svg class="ic"><use href="#i-chart"/></svg>Reports</button>
       <button data-view="pans"><svg class="ic"><use href="#i-card"/></svg>PANs</button>
+      <button data-view="import"><svg class="ic"><use href="#i-upload"/></svg>Import PANs</button>
       <div class="nav-label" data-admin>Admin</div>
-      <button data-view="import" data-admin><svg class="ic"><use href="#i-upload"/></svg>Import PANs</button>
       <button data-view="users" data-admin><svg class="ic"><use href="#i-users"/></svg>Users</button>
       <button data-view="audit" data-admin><svg class="ic"><use href="#i-shield"/></svg>Audit log</button>
     </nav>
@@ -327,7 +347,7 @@
           <div class="card-head">
             <h3><svg class="ic"><use href="#i-clock"/></svg>Today's allotments</h3>
             <span class="row"><span id="schedInfo" class="muted small"></span>
-              <button class="btn sm hidden" id="schedRun" data-admin-inline><svg class="ic"><use href="#i-zap"/></svg>Run scheduler now</button></span>
+              <button class="btn sm hidden" id="schedRun"><svg class="ic"><use href="#i-zap"/></svg>Run scheduler now</button></span>
           </div>
           <div class="table-wrap"><table><tbody id="todayRows"></tbody></table></div>
         </div>
@@ -391,7 +411,7 @@
             <label class="check" style="height:36px"><input type="checkbox" id="ipoAuto"> Auto-check on allotment day</label>
             <div class="row">
               <button class="btn primary" id="ipoSave"><svg class="ic"><use href="#i-save"/></svg>Save</button>
-              <button class="btn" id="ipoArchive" data-admin-inline></button>
+              <button class="btn" id="ipoArchive"></button>
             </div>
           </div>
         </div>
@@ -404,7 +424,6 @@
                 <option value="NOT_APPLIED">Not applied</option><option value="ERROR">Error</option><option value="PENDING">Unchecked</option></select>
               <select id="resClient"><option value="">All clients</option></select>
               <div class="search" style="min-width:200px"><svg class="ic"><use href="#i-search"/></svg><input id="resQ" placeholder="Search name or full PAN"></div>
-              <label class="check" data-admin-inline data-tip="Include full PAN numbers (recorded in the audit log)"><input type="checkbox" id="resFullPan"> Full PANs</label>
               <button class="btn" id="resExport"><svg class="ic"><use href="#i-download"/></svg>Download Excel</button>
             </div>
           </div>
@@ -425,7 +444,6 @@
             <label class="fld">Client<select id="repClient"><option value="">All clients</option></select></label>
             <label class="fld">View<select id="repGroup"><option value="client">Group by client</option><option value="pan">Group by PAN</option></select></label>
             <span class="grow"></span>
-            <label class="check" data-admin-inline data-tip="Include full PAN numbers (recorded in the audit log)"><input type="checkbox" id="repFullPan"> Full PANs</label>
             <button class="btn primary" id="repExport" disabled><svg class="ic"><use href="#i-download"/></svg>Download Excel</button>
           </div>
           <div class="callout" style="margin-top:14px"><svg class="ic"><use href="#i-info"/></svg>
@@ -445,7 +463,7 @@
 
       <!-- ---------- PANs ---------- -->
       <section id="view-pans" class="hidden">
-        <div class="card hidden" id="delFileCard" data-admin-inline>
+        <div class="card hidden" id="delFileCard">
           <div class="card-head"><h3><svg class="ic"><use href="#i-trash"/></svg>Delete PANs from Excel</h3>
             <button class="btn sm" data-template="delete"><svg class="ic"><use href="#i-file"/></svg>Download delete format</button></div>
           <div class="row">
@@ -464,23 +482,23 @@
               <select id="clientFilter"><option value="">All clients</option></select>
               <label class="check"><input type="checkbox" id="inactive"> Show inactive</label>
             </div>
-            <span class="row" data-admin-inline>
+            <span class="row">
               <span id="selInfo" class="muted small"></span>
               <a class="link small hidden" id="selAll"></a>
               <button class="btn danger" id="bulkDelete" disabled><svg class="ic"><use href="#i-trash"/></svg>Delete selected</button>
               <button class="btn" id="showDelFile"><svg class="ic"><use href="#i-file"/></svg>Delete from Excel</button>
             </span>
           </div>
-          <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th data-admin-inline style="width:36px"><input type="checkbox" id="selPage" aria-label="Select this page"></th>
-            <th>PAN</th><th>Name</th><th class="grp">Client</th><th>Mobile</th><th>DP / Client ID</th><th class="num" data-admin-inline>Actions</th></tr></thead>
+          <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th style="width:36px"><input type="checkbox" id="selPage" aria-label="Select this page"></th>
+            <th>PAN</th><th>Name</th><th class="grp">Client</th><th>Mobile</th><th>DP / Client ID</th><th class="num">Actions</th></tr></thead>
           <tbody id="panRows"></tbody></table></div>
           <div class="table-foot"><span class="muted small" id="panCount"></span>
             <div class="pager"><span id="pageInfo" class="muted small"></span>
               <button class="icon-btn" id="prev" data-tip="Previous page" aria-label="Previous"><svg class="ic"><use href="#i-chev-left"/></svg></button>
               <button class="icon-btn" id="next" data-tip="Next page" aria-label="Next"><svg class="ic"><use href="#i-chev-right"/></svg></button></div></div>
         </div>
-        <div class="callout" data-admin-inline><svg class="ic"><use href="#i-info"/></svg>
-          <span><b>Delete</b> erases the full PAN permanently; its past IPO results stay in Reports with the masked PAN and name.
+        <div class="callout"><svg class="ic"><use href="#i-info"/></svg>
+          <span><b>Delete</b> removes a PAN from this list and from future checks; its past IPO results stay in Reports with the full PAN and name.
             Use <b>Deactivate</b> to pause a PAN instead.</span></div>
       </section>
 
@@ -574,7 +592,7 @@ function toast(text, kind = "ok") {
 let dlgResolve = null, dlgReturnFocus = null;
 function confirmDialog({ title, message = "", who = "", note = "", confirm = "Confirm", kind = "primary", icon }) {
   const d = $("#confirm");
-  d.className = kind === "primary" ? "" : kind;
+  d.className = `modal${kind === "primary" ? "" : ` ${kind}`}`;
   $("#dlgIcon").innerHTML = ic(icon ?? { danger: "trash", warn: "alert", ok: "check-circle", primary: "info" }[kind]);
   $("#dlgTitle").textContent = title;
   $("#dlgMsg").innerHTML = `${esc(message)}${who ? `<div><span class="who">${esc(who)}</span></div>` : ""}`;
@@ -642,7 +660,7 @@ const PAGES = {
   pans: ["PANs", "Your clients' PAN list"],
   import: ["Import PANs", "Add or update PANs from Excel"],
   users: ["Users", "Who can sign in"],
-  audit: ["Audit log", "Logins, imports, exports, reveals and deletes"],
+  audit: ["Audit log", "Logins, imports, exports and deletes"],
 };
 function showLogin() { $("#shell").classList.add("hidden"); $("#login").classList.remove("hidden"); setTimeout(() => $("#loginUser").focus(), 0); }
 function showShell() {
@@ -650,7 +668,8 @@ function showShell() {
   $("#meName").textContent = me.name;
   $("#meRole").textContent = me.role === "ADMIN" ? "Administrator" : "Operator";
   $("#avatar").textContent = me.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-  document.querySelectorAll("[data-admin], [data-admin-inline]").forEach((b) => b.classList.toggle("hidden", me.role !== "ADMIN"));
+  // Operators can do everything except manage users and read the audit log.
+  document.querySelectorAll("[data-admin]").forEach((b) => b.classList.toggle("hidden", me.role !== "ADMIN"));
   show("ipos");
 }
 
@@ -671,7 +690,6 @@ function download(url) {
   const a = document.createElement("a");
   a.href = url; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
 }
-const fullPanParam = (box) => (me.role === "ADMIN" && $(box).checked ? "true" : "false");
 const emptyRow = (cols, text) => `<tr><td colspan="${cols}" class="empty">${text}</td></tr>`;
 
 // ---------- Login ----------
@@ -796,7 +814,7 @@ async function loadReport() {
 }
 ["#repClient", "#repIpo", "#repGroup"].forEach((s) => $(s).addEventListener("change", loadReport));
 $("#repExport").addEventListener("click", () => {
-  const p = reportParams(); p.set("fullPan", fullPanParam("#repFullPan"));
+  const p = reportParams();
   download(`/api/reports/history/export?${p}`);
 });
 
@@ -977,7 +995,7 @@ async function loadResults() {
     const st = r ? r.status : "PENDING";
     // Hovering the status shows when it was checked (and any registrar message).
     const tipText = r ? `Checked: ${fmtDate(r.checkedAt)}${r.message ? ` · ${r.message}` : ""}` : "Not checked yet";
-    return `<tr><td class="num rn">${from + i}</td><td class="pan">${esc(p.pan)}</td><td class="name">${esc(p.holderName)}</td>${grpCell(p.client.name, p.holderName)}
+    return `<tr><td class="num rn">${from + i}</td><td class="pan">${esc(p.pan ?? p.panMasked)}</td><td class="name">${esc(p.holderName)}</td>${grpCell(p.client.name, p.holderName)}
       <td><span class="tag ${st}" data-tip="${esc(tipText)}">${STATUS_LABEL[st]}</span>${r?.message ? `<div class="muted small">${esc(r.message)}</div>` : ""}</td>
       <td class="num qty">${fmtNum(r?.appliedQty)}</td>
       <td class="num qty">${st === "ALLOTTED" ? `<b style="color:var(--ok)">${fmtNum(r.allottedQty)}</b>` : fmtNum(r?.allottedQty)}</td>
@@ -1043,7 +1061,7 @@ $("#resClient").addEventListener("change", () => { resPage = 1; loadResults(); }
 let resTimer;
 $("#resQ").addEventListener("input", () => { clearTimeout(resTimer); resTimer = setTimeout(() => { resPage = 1; loadResults(); }, 300); });
 $("#resExport").addEventListener("click", () => {
-  const p = new URLSearchParams({ fullPan: fullPanParam("#resFullPan") });
+  const p = new URLSearchParams();
   if ($("#resStatus").value) p.set("status", $("#resStatus").value);
   if ($("#resClient").value) p.set("clientId", $("#resClient").value);
   if ($("#resQ").value.trim()) p.set("q", $("#resQ").value.trim());
@@ -1068,12 +1086,11 @@ async function loadPans() {
   $("#panCount").textContent = `${total} PAN${total === 1 ? "" : "s"}`;
   $("#pageInfo").textContent = `Page ${page} of ${pages}`;
   $("#prev").disabled = page <= 1; $("#next").disabled = page >= pages;
-  const admin = me.role === "ADMIN";
   panTotal = total;
   panById = new Map(pans.map((x) => [x.id, x]));
   $("#panRows").innerHTML = pans.map(panRow).join("")
-    || emptyRow(7, `No PANs match${admin ? ". Use <b>Import PANs</b> to add them." : "."}`);
-  document.querySelectorAll("#view-pans [data-admin-inline]").forEach((el) => el.classList.toggle("hidden", !admin || (el.id === "delFileCard" && !showDelFile)));
+    || emptyRow(7, `No PANs match. Use <b>Import PANs</b> to add them.`);
+  $("#delFileCard").classList.toggle("hidden", !showDelFile);
   setGroupCol("#panRows", pans, (x) => x.client.name, (x) => x.holderName);
   updateSelection();
 }
@@ -1083,20 +1100,18 @@ const panFilter = () => ({
   ...($("#inactive").checked ? { includeInactive: true } : {}),
 });
 function panRow(x) {
-  const admin = me.role === "ADMIN";
   return `<tr data-row="${x.id}"${x.active ? "" : ' class="muted"'}>
-    ${admin ? `<td><input type="checkbox" class="selPan" value="${x.id}" aria-label="Select"${selected.has(x.id) || selectAllMatching ? " checked" : ""}></td>` : ""}
-    <td class="mono" data-pan="${x.id}">${esc(x.panMasked)}</td><td>${esc(x.holderName)}${x.active ? "" : ' <span class="tag plain">inactive</span>'}</td>${grpCell(x.client.name, x.holderName)}
+    <td><input type="checkbox" class="selPan" value="${x.id}" aria-label="Select"${selected.has(x.id) || selectAllMatching ? " checked" : ""}></td>
+    <td class="mono" style="white-space:nowrap;letter-spacing:.03em">${esc(x.pan ?? x.panMasked)}</td><td>${esc(x.holderName)}${x.active ? "" : ' <span class="tag plain">inactive</span>'}</td>${grpCell(x.client.name, x.holderName)}
     <td>${esc(x.mobile)}</td><td class="mono">${esc(x.dpClientId)}</td>
-    ${admin ? `<td><div class="actions">
+    <td><div class="actions">
       ${iconBtn("pencil", "Edit name, mobile, DP ID", `data-edit="${x.id}"`)}
-      ${iconBtn("eye", "Reveal full PAN for 10 seconds", `data-reveal="${x.id}"`)}
       ${x.active ? iconBtn("pause", "Deactivate (skip in checks)", `data-toggle="${x.id}" data-active="true"`)
                  : iconBtn("resume", "Activate", `data-toggle="${x.id}" data-active="false"`, "ok")}
-      ${iconBtn("trash", "Delete permanently", `data-del="${x.id}"`, "danger")}</div></td>` : ""}</tr>`;
+      ${iconBtn("trash", "Delete", `data-del="${x.id}"`, "danger")}</div></td></tr>`;
 }
 function editRow(x) {
-  return `<tr data-row="${x.id}"><td></td><td class="mono">${esc(x.panMasked)}</td>
+  return `<tr data-row="${x.id}"><td></td><td class="mono">${esc(x.pan ?? x.panMasked)}</td>
     <td><input class="edit" data-f="holderName" value="${esc(x.holderName)}" aria-label="Name"></td>${grpCell(x.client.name, x.holderName)}
     <td><input class="edit" data-f="mobile" value="${esc(x.mobile)}" aria-label="Mobile"></td><td><input class="edit mono" data-f="dpClientId" value="${esc(x.dpClientId)}" aria-label="DP ID"></td>
     <td><div class="actions">${iconBtn("check", "Save changes", `data-save="${x.id}"`, "ok")}${iconBtn("x", "Cancel", `data-cancel="${x.id}"`)}</div>
@@ -1128,9 +1143,9 @@ $("#selAll").addEventListener("click", () => {
 });
 $("#bulkDelete").addEventListener("click", async () => {
   const n = selectAllMatching ? panTotal : selected.size;
-  if (!(await confirmDialog({ title: `Delete ${n} PAN${n === 1 ? "" : "s"} permanently?`, kind: "danger",
-    message: "The full PAN numbers are erased and can't be recovered.",
-    note: "Past IPO results stay in Reports with the masked PAN and name.", confirm: `Delete ${n} PAN${n === 1 ? "" : "s"}` }))) return;
+  if (!(await confirmDialog({ title: `Delete ${n} PAN${n === 1 ? "" : "s"}?`, kind: "danger",
+    message: "They're removed from the PAN list and won't be checked for new IPOs.",
+    note: "Past IPO results stay in Reports with the full PAN and name.", confirm: `Delete ${n} PAN${n === 1 ? "" : "s"}` }))) return;
   const body = selectAllMatching ? { filter: panFilter() } : { ids: [...selected] };
   try {
     const { deleted } = await api("/api/pans/bulk-delete", { method: "POST", body: JSON.stringify(body) });
@@ -1158,18 +1173,12 @@ $("#panRows").addEventListener("click", async (e) => {
   const b = e.target.closest("button"); if (!b) return;
   const d = b.dataset, tr = b.closest("tr");
   try {
-    if (d.reveal) {
-      const { pan } = await api(`/api/pans/${d.reveal}/reveal`);
-      const cell = document.querySelector(`[data-pan="${d.reveal}"]`); const masked = cell.textContent;
-      cell.textContent = pan; cell.style.color = "var(--accent)";
-      setTimeout(() => { cell.textContent = masked; cell.style.color = ""; }, 10000);
-    }
     if (d.toggle) {
       const activate = d.active !== "true", x = panById.get(+d.toggle);
       const ok = activate
-        ? await confirmDialog({ title: "Activate this PAN?", who: `${x.holderName} · ${x.panMasked}`, kind: "ok", icon: "resume", confirm: "Activate",
+        ? await confirmDialog({ title: "Activate this PAN?", who: `${x.holderName} · ${x.pan ?? x.panMasked}`, kind: "ok", icon: "resume", confirm: "Activate",
             message: "It will be included in allotment checks again.", note: "New checks for tracked IPOs pick it up as unchecked." })
-        : await confirmDialog({ title: "Deactivate this PAN?", who: `${x.holderName} · ${x.panMasked}`, kind: "warn", icon: "pause", confirm: "Deactivate",
+        : await confirmDialog({ title: "Deactivate this PAN?", who: `${x.holderName} · ${x.pan ?? x.panMasked}`, kind: "warn", icon: "pause", confirm: "Deactivate",
             message: "It's skipped in allotment checks and hidden from the PAN list.", note: "Nothing is deleted. Tick \"Show inactive\" to find it and activate it again." });
       if (!ok) return;
       await api(`/api/pans/${d.toggle}`, { method: "PATCH", body: JSON.stringify({ active: activate }) });
@@ -1186,9 +1195,9 @@ $("#panRows").addEventListener("click", async (e) => {
     }
     if (d.del) {
       const x = panById.get(+d.del);
-      if (!(await confirmDialog({ title: "Delete this PAN permanently?", who: `${x.holderName} · ${x.panMasked}`, kind: "danger", confirm: "Delete PAN",
-        message: "The full PAN number is erased and can't be recovered.",
-        note: "Past IPO results stay in Reports with the masked PAN and name. To just pause it, use Deactivate instead." }))) return;
+      if (!(await confirmDialog({ title: "Delete this PAN?", who: `${x.holderName} · ${x.pan ?? x.panMasked}`, kind: "danger", confirm: "Delete PAN",
+        message: "It's removed from the PAN list and won't be checked for new IPOs.",
+        note: "Past IPO results stay in Reports with the full PAN and name. To just pause it, use Deactivate instead." }))) return;
       await api(`/api/pans/${d.del}`, { method: "DELETE" });
       selected.delete(+d.del); toast("PAN deleted"); loadPans();
     }
@@ -1218,8 +1227,8 @@ async function runDeleteFile(dryRun) {
     $("#delCommit").disabled = !r.matched.length;
     const grouped = r.matched.some((m) => !sameName(m.clientName, m.holderName));
     $("#delResult").innerHTML = `<table${grouped ? "" : ' class="no-grp"'}><thead><tr><th>Row</th><th>PAN</th><th>Name</th><th class="grp">Client</th><th>Result</th></tr></thead><tbody>
-      ${r.matched.map((m) => `<tr><td>${m.rowNumber}</td><td class="mono">${esc(m.panMasked)}</td><td>${esc(m.holderName)}</td>${grpCell(m.clientName, m.holderName)}<td><span class="tag error">will delete</span></td></tr>`).join("")}
-      ${r.notFound.map((m) => `<tr class="muted"><td>${m.rowNumber}</td><td class="mono">${esc(m.panMasked)}</td><td></td><td class="grp"></td><td>not in the system</td></tr>`).join("")}
+      ${r.matched.map((m) => `<tr><td>${m.rowNumber}</td><td class="mono">${esc(m.pan ?? m.panMasked)}</td><td>${esc(m.holderName)}</td>${grpCell(m.clientName, m.holderName)}<td><span class="tag error">will delete</span></td></tr>`).join("")}
+      ${r.notFound.map((m) => `<tr class="muted"><td>${m.rowNumber}</td><td class="mono">${esc(m.pan ?? m.panMasked)}</td><td></td><td class="grp"></td><td>not in the system</td></tr>`).join("")}
       ${r.errors.map((m) => `<tr><td>${m.rowNumber}</td><td></td><td></td><td class="grp"></td><td class="err">${esc(m.message)}</td></tr>`).join("")}
       </tbody></table>`;
   } catch (err) { $("#delMsg").textContent = err.message; $("#delMsg").className = "msg err"; }
@@ -1227,9 +1236,9 @@ async function runDeleteFile(dryRun) {
 $("#delPreview").addEventListener("click", () => runDeleteFile(true));
 $("#delCommit").addEventListener("click", async () => {
   const n = $("#delResult").querySelectorAll(".tag.error").length;
-  if (await confirmDialog({ title: `Delete ${n} matched PAN${n === 1 ? "" : "s"} permanently?`, kind: "danger", confirm: `Delete ${n} PAN${n === 1 ? "" : "s"}`,
-    who: $("#delFile").files[0]?.name ?? "", message: "The full PAN numbers are erased and can't be recovered.",
-    note: "Past IPO results stay in Reports with the masked PAN and name." })) runDeleteFile(false);
+  if (await confirmDialog({ title: `Delete ${n} matched PAN${n === 1 ? "" : "s"}?`, kind: "danger", confirm: `Delete ${n} PAN${n === 1 ? "" : "s"}`,
+    who: $("#delFile").files[0]?.name ?? "", message: "They're removed from the PAN list and won't be checked for new IPOs.",
+    note: "Past IPO results stay in Reports with the full PAN and name." })) runDeleteFile(false);
 });
 $("#delFile").addEventListener("change", () => { $("#delCommit").disabled = true; $("#delResult").innerHTML = ""; $("#delMsg").textContent = ""; });
 
@@ -1283,7 +1292,7 @@ function renderPlan(plan) {
   $("#skipWrap").classList.toggle("hidden", !plan.errors.length);
   $("#importErrors").innerHTML = plan.errors.map((e) => `<tr><td>${e.rowNumber}</td><td class="err">${esc(e.message)}</td></tr>`).join("");
   $("#importRows").innerHTML = plan.rows.map((r) => `<tr><td>${r.rowNumber}</td><td><span class="tag ${r.action}">${r.action}</span></td>
-    <td class="mono">${esc(r.panMasked)}</td><td>${esc(r.holderName)}</td>${grpCell(r.clientName, r.holderName)}<td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("")
+    <td class="mono">${esc(r.pan ?? r.panMasked)}</td><td>${esc(r.holderName)}</td>${grpCell(r.clientName, r.holderName)}<td class="muted">${esc((r.changes || []).join(", "))}</td></tr>`).join("")
     || emptyRow(6, "No valid rows.");
   setGroupCol("#importRows", plan.rows, (r) => r.clientName, (r) => r.holderName);
 }
@@ -1294,17 +1303,63 @@ $("#file").addEventListener("change", () => { $("#commit").disabled = true; $("#
 $("#skipErrors").addEventListener("change", () => { $("#commit").disabled = false; });
 
 // ---------- Users ----------
+let usersById = new Map();
+const initials = (name) => name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 async function loadUsers() {
   const { users } = await api("/api/users");
+  usersById = new Map(users.map((u) => [u.id, u]));
   $("#userRows").innerHTML = users.map((u) => `<tr${u.active ? "" : ' class="muted"'}>
-    <td><div class="row" style="gap:10px"><div class="avatar" style="width:28px;height:28px;font-size:11px">${esc(u.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase())}</div>${esc(u.name)}</div></td>
+    <td><div class="row" style="gap:10px"><div class="avatar" style="width:28px;height:28px;font-size:11px">${esc(initials(u.name))}</div>${esc(u.name)}${u.id === me.id ? ' <span class="muted small">(you)</span>' : ""}</div></td>
     <td class="mono">${esc(u.email)}</td><td><span class="tag plain ${u.role}">${u.role === "ADMIN" ? "Admin" : "Operator"}</span></td>
     <td>${u.active ? '<span class="tag ALLOTTED">Active</span>' : '<span class="tag NOT_ALLOTTED">Disabled</span>'}</td>
-    <td><div class="actions">${u.id === me.id ? '<span class="muted small">You</span>'
+    <td><div class="actions">${iconBtn("pencil", "Edit user", `data-edit-user="${u.id}"`)}${u.id === me.id ? ""
       : u.active ? iconBtn("pause", "Disable sign-in", `data-uid="${u.id}" data-active="true"`, "danger")
                  : iconBtn("resume", "Enable sign-in", `data-uid="${u.id}" data-active="false"`, "ok")}</div></td></tr>`).join("");
 }
+
+// Edit user dialog
+let editingUser = null;
+function openUserEdit(u) {
+  editingUser = u;
+  const f = $("#userEditForm");
+  f.name.value = u.name; f.email.value = u.email; f.role.value = u.role; f.password.value = "";
+  const self = u.id === me.id;
+  f.role.disabled = self; $("#udSelfNote").classList.toggle("hidden", !self);
+  $("#udMsg").textContent = "";
+  $("#udTitle").textContent = `Edit ${u.name}`;
+  hideTip(); $("#userDlg").classList.remove("hidden");
+  setTimeout(() => f.name.focus(), 0);
+}
+const closeUserEdit = () => { $("#userDlg").classList.add("hidden"); editingUser = null; };
+$("#udCancel").addEventListener("click", closeUserEdit);
+$("#userDlg").addEventListener("mousedown", (e) => { if (e.target.id === "userDlg") closeUserEdit(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingUser) closeUserEdit(); });
+$("#userEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, u = editingUser;
+  const body = {};
+  if (f.name.value.trim() !== u.name) body.name = f.name.value.trim();
+  if (f.email.value.trim().toLowerCase() !== u.email) body.email = f.email.value.trim();
+  if (!f.role.disabled && f.role.value !== u.role) body.role = f.role.value;
+  if (f.password.value) {
+    if (f.password.value.length < 10) { $("#udMsg").textContent = "Password must be at least 10 characters."; return; }
+    body.password = f.password.value;
+  }
+  if (!Object.keys(body).length) return closeUserEdit();
+  const btn = $("#udSave"); btn.disabled = true;
+  try {
+    const { user } = await api(`/api/users/${u.id}`, { method: "PATCH", body: JSON.stringify(body) });
+    closeUserEdit();
+    toast(body.password ? `${user.name} updated, password changed` : `${user.name} updated`);
+    if (user.id === me.id) { me = { ...me, ...user }; $("#meName").textContent = me.name; $("#avatar").textContent = initials(me.name); }
+    loadUsers();
+  } catch (err) { $("#udMsg").textContent = err.data?.issues?.join("; ") || err.message; }
+  finally { btn.disabled = false; }
+});
+
 $("#userRows").addEventListener("click", async (e) => {
+  const ed = e.target.closest("[data-edit-user]");
+  if (ed) return openUserEdit(usersById.get(+ed.dataset.editUser));
   const b = e.target.closest("[data-uid]"); if (!b) return;
   const enable = b.dataset.active !== "true";
   const who = b.closest("tr").querySelector("td")?.innerText.trim() ?? "";

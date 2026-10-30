@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireAdmin, requireLogin } from "../auth.js";
+import { requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { clientCode } from "../services/panImport.js";
 import { sameName } from "../lib/names.js";
@@ -32,7 +32,7 @@ export async function clientRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/", { preHandler: requireLogin }, async (req, reply) => {
     const body = createBody.parse(req.body);
     const code = clientCode(body.code ?? body.name);
     if (await app.prisma.client.findUnique({ where: { code } })) {
@@ -43,7 +43,7 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(201).send({ client });
   });
 
-  app.patch("/:id", { preHandler: requireAdmin }, async (req, reply) => {
+  app.patch("/:id", { preHandler: requireLogin }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = updateBody.parse(req.body);
     if (!(await app.prisma.client.findUnique({ where: { id } }))) return reply.code(404).send({ error: "Client not found" });

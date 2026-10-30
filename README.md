@@ -47,13 +47,13 @@ Use **Import** in the UI with an `.xlsx` or `.csv` file. Headers are matched fle
 - Click **Download import format** for a ready-made Excel with the right columns.
 - Tick IPOs under "After import, check the new PANs for" and the new PANs are checked as soon as they're imported.
 
-## Editing and deleting PANs (admins)
+## Editing and deleting PANs
 - **Edit:** on the PANs page, click **Edit** on a row to change the name, mobile or DP ID.
 - **Delete one:** click **Delete** on its row.
 - **Delete many:**
   - Tick rows, or tick the header box and click **Select all N matching** to cover every page of the current search or client filter. Then click **Delete selected**.
   - Or click **Delete from Excel…**, upload a list of PANs (**Download delete format** gives the file), **Preview**, then **Delete matched PANs**.
-- **What deleting does:** it erases the full PAN permanently. Past IPO results are **kept in Reports**, showing the masked PAN, holder name and client, marked "deleted". IPO totals in reports don't change. Full-PAN exports show deleted PANs masked.
+- **What deleting does:** the PAN leaves the PAN list and future checks. Its past IPO results are **kept in Reports and exports** with the full PAN, name and client, marked "deleted", and IPO totals don't change. PANs deleted before 30 Oct 2026 show masked in history, because their full number had already been erased.
 - **Pause instead of deleting:** use **Deactivate**. A deactivated PAN is skipped in checks but kept in full.
 
 ## Checking allotment
@@ -90,7 +90,7 @@ On the IPO page, set the **Allotment date** and keep **Auto-check on allotment d
 - **Every 10 minutes, 9:00–23:00 IST,** on allotment day and the day after, it checks any PANs not checked yet.
 - **If the registrar hasn't published yet** (everything comes back "not applied"), it doesn't re-check every PAN. Every 30 minutes it **probes 10 random PANs**, and once a probe finds a real application it re-checks everyone.
 - **Errors** are retried automatically, up to 3 times, 15 minutes apart.
-- **The IPOs page** shows a **Today's allotments** panel with what it's doing. Admins can click **Run scheduler now**.
+- **The IPOs page** shows a **Today's allotments** panel with what it's doing. Anyone can click **Run scheduler now**.
 
 Settings in `.env` (optional): `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_MIN`, `SCHEDULER_START_HOUR`, `SCHEDULER_END_HOUR`.
 The server has to be running for this to work. See "Running as a service" below.
@@ -102,14 +102,14 @@ The server has to be running for this to work. See "Running as a service" below.
   - Filters by date range, client, registrar or IPO.
   - **Download Excel** gives Overview, By client, By PAN and Detail sheets.
 - **Only "Allotted" and "Not allotted" count as applied.** "Not applied" and errors are left out of the ratio.
-- **PANs in exports are masked.** Admins can tick **Full PANs**, and every export is written to the audit log.
+- **PANs are shown in full** on every screen and in every export. Every export is written to the audit log. PANs are still stored encrypted in the database.
 - **Listing gain:** enter the **Listing price** on the IPO page. If you also enter an **Issue price**, it's used; otherwise the price the registrar reported is.
   - Gain = (listing − issue) × shares allotted. It's shown on the IPO page, in reports and in both Excel files.
   - Allotments with no listing price yet are counted separately (marked \* in reports).
 
 ## Roles
-- **ADMIN**: manage users, import and edit PANs, reveal full PANs (each reveal is logged), view the audit log.
-- **OPERATOR**: view PANs (masked), track IPOs, and run or cancel allotment checks.
+- **ADMIN**: everything, plus **Users** (add, edit, disable, reset passwords) and the **Audit log**.
+- **OPERATOR**: everything except Users and the Audit log: import, edit, deactivate and delete PANs, track and archive IPOs, run checks, see reports and export.
 
 ## Publishing through IIS (internet access)
 IIS handles the domain and HTTPS certificate and forwards requests to the app, which listens only on `127.0.0.1`:

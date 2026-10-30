@@ -20,6 +20,7 @@ export type PlanAction = "create" | "update" | "unchanged";
 export interface PlannedRow {
   rowNumber: number;
   action: PlanAction;
+  pan: string;
   panMasked: string;
   holderName: string;
   clientCode: string;
@@ -56,7 +57,7 @@ export async function planImport(
     const s = sealed.get(r.rowNumber)!;
     const code = clientCode(r.clientName);
     if (!knownCodes.has(code) && !newClients.has(code)) newClients.set(code, r.clientName);
-    const base = { rowNumber: r.rowNumber, panMasked: maskPan(r.pan), holderName: r.holderName, clientCode: code, clientName: r.clientName };
+    const base = { rowNumber: r.rowNumber, pan: r.pan, panMasked: maskPan(r.pan), holderName: r.holderName, clientCode: code, clientName: r.clientName };
 
     const cur = byHash.get(s.panHash);
     if (!cur) return { ...base, action: "create" };

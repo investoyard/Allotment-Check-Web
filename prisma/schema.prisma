@@ -101,6 +101,8 @@ model CheckResult {
   pan            Pan?            @relation(fields: [panId], references: [id], onDelete: SetNull)
   /// Snapshot taken when the PAN is deleted (null while the PAN exists)
   panMasked      String?
+  /// Full PAN (encrypted, same scheme as Pan.panEncrypted) kept so reports still show it
+  panEncrypted   String?
   holderName     String?
   clientId       Int?
   clientName     String?

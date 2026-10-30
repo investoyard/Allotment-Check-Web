@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { AllotmentStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { requireAdmin, requireLogin } from "../auth.js";
+import { requireLogin } from "../auth.js";
 import { audit } from "../audit.js";
 import { CHECK_SCOPES, createCheckJob } from "../services/checkJobs.js";
 import { isValidPan, normalizePan } from "../lib/pan.js";
@@ -32,8 +32,6 @@ const updateBody = z.object({
   autoCheck: z.boolean().optional(),
   archived: z.boolean().optional(),
 });
-/** Operators may set dates and auto-check; renaming and archiving are admin-only. */
-const ADMIN_ONLY_FIELDS = ["name", "archived"] as const;
 
 const STATUSES = ["ALLOTTED", "NOT_ALLOTTED", "NOT_APPLIED", "ERROR"] as const;
 
@@ -46,7 +44,6 @@ const resultsQuery = z.object({
 });
 
 const checkBody = z.object({ scope: z.enum(CHECK_SCOPES).default("unchecked") });
-export const fullPanQuery = z.object({ fullPan: z.enum(["true", "false"]).default("false") });
 
 /** Sends an .xlsx download with a safe file name, e.g. "Paras Healthcare allotment 2026-10-28.xlsx". */
 export function sendXlsx(reply: FastifyReply, baseName: string, buf: Buffer) {
@@ -57,6 +54,9 @@ export function sendXlsx(reply: FastifyReply, baseName: string, buf: Buffer) {
     .header("Cache-Control", "no-store")
     .send(buf);
 }
+
+/** Result fields that never go to the browser: the registrar's raw reply and the deleted-PAN snapshot. */
+const RESULT_PRIVATE = { raw: true, panEncrypted: true, panMasked: true, holderName: true, clientId: true, clientName: true } as const;
 
 const toDate = (d: string | null | undefined) => (d === undefined ? undefined : d === null ? null : new Date(`${d}T00:00:00Z`));
 
@@ -135,9 +135,6 @@ export async function ipoRoutes(app: FastifyInstance) {
   app.patch("/:id", async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = updateBody.parse(req.body);
-    if (req.currentUser!.role !== "ADMIN" && ADMIN_ONLY_FIELDS.some((f) => body[f] !== undefined)) {
-      return reply.code(403).send({ error: "Only admins can rename or archive IPOs" });
-    }
     if (!(await app.prisma.ipo.findUnique({ where: { id } }))) return reply.code(404).send({ error: "IPO not found" });
     const ipo = await app.prisma.ipo.update({
       where: { id },
@@ -186,31 +183,26 @@ export async function ipoRoutes(app: FastifyInstance) {
           panEncrypted: true,
           holderName: true,
           client: { select: { id: true, name: true } },
-          results: { where: { ipoId: id }, omit: { raw: true } },
+          results: { where: { ipoId: id }, omit: RESULT_PRIVATE },
         },
       }),
     ]);
-    // Admins see full PANs in the results grid; operators only the masked form.
-    const admin = req.currentUser!.role === "ADMIN";
     return {
       total,
       page,
       pageSize,
-      fullPan: admin,
       rows: pans.map(({ results, panEncrypted, ...p }) => ({
         ...p,
-        pan: admin ? app.vault.open(panEncrypted) : p.panMasked,
+        pan: app.vault.open(panEncrypted),
         result: results[0] ?? null,
       })),
     };
   });
 
-  /** Excel download of the results table (same filters). Full PANs: admins only, audited. */
+  /** Excel download of the results table (same filters), with full PANs. Audited. */
   app.get("/:id/export", async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const { page: _p, pageSize: _s, ...filters } = resultsQuery.parse(req.query);
-    const { fullPan } = fullPanQuery.parse(req.query);
-    if (fullPan === "true" && req.currentUser!.role !== "ADMIN") return reply.code(403).send({ error: "Only admins can export full PANs" });
     const ipo = await app.prisma.ipo.findUnique({ where: { id } });
     if (!ipo) return reply.code(404).send({ error: "IPO not found" });
 
@@ -222,7 +214,7 @@ export async function ipoRoutes(app: FastifyInstance) {
         panEncrypted: true,
         holderName: true,
         client: { select: { name: true } },
-        results: { where: { ipoId: id }, omit: { raw: true } },
+        results: { where: { ipoId: id }, omit: RESULT_PRIVATE },
       },
     });
     const rows: IpoExportRow[] = pans.map((p) => {
@@ -230,7 +222,7 @@ export async function ipoRoutes(app: FastifyInstance) {
       return {
         clientName: p.client.name,
         holderName: p.holderName,
-        pan: fullPan === "true" ? app.vault.open(p.panEncrypted) : p.panMasked,
+        pan: app.vault.open(p.panEncrypted),
         status: r?.status ?? "PENDING",
         appliedQty: r?.appliedQty ?? null,
         allottedQty: r?.allottedQty ?? null,
@@ -251,7 +243,7 @@ export async function ipoRoutes(app: FastifyInstance) {
       await counts(id),
       rows,
     );
-    await audit(req, "export.ipo", { entity: "Ipo", entityId: id, details: { rows: rows.length, fullPan: fullPan === "true", ...filters } });
+    await audit(req, "export.ipo", { entity: "Ipo", entityId: id, details: { rows: rows.length, ...filters } });
     return sendXlsx(reply, `${ipo.name} allotment`, buf);
   });
 
