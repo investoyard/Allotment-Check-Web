@@ -48,8 +48,8 @@ human captcha. Polite rate limits (1–2 req/s per registrar), retry with backof
 Statuses: `ALLOTTED`, `NOT_ALLOTTED`, `NOT_APPLIED`, `PENDING`, `CAPTCHA_REQUIRED`, `ERROR`.
 
 ## Security & compliance
-- PANs encrypted at rest; masked in UI (`ABCPX****K`) unless permitted; never in URLs/logs
-- Role-based access, audit log of checks/exports/imports
+- PANs encrypted at rest; shown in full to every signed-in user (decided 30 Oct 2026); never in URLs/logs
+- Roles: OPERATOR can do everything except Users and Audit log (ADMIN only); audit log of logins/checks/imports/exports/deletes
 - DPDP Act 2023: client consent, retention policy, delete/anonymise function
 
 ## Reports
